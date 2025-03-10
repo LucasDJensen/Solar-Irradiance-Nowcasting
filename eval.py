@@ -81,7 +81,7 @@ model = Seq2Seq(encoder, decoder, device).to(device)
 # 8. Load the Trained Model Checkpoint
 # -----------------------------
 # Specify the checkpoint file (change if needed)
-checkpoint_path = "model_epoch_1.pth"
+checkpoint_path = "output/model_epoch_4.pth"
 if os.path.exists(checkpoint_path):
     model.load_state_dict(torch.load(checkpoint_path, map_location=device))
     print(f"Loaded model checkpoint from {checkpoint_path}")
@@ -133,7 +133,7 @@ for i, idx in enumerate(indices):
     plt.ylabel("Scaled GHI")
     plt.legend()
     plt.tight_layout()
-    plt.savefig(f"test_sample_{i}_comparison.png")
+    plt.savefig(f"output/test_sample_{i}_comparison.png")
     plt.show()
 
 # -----------------------------
@@ -146,5 +146,5 @@ plt.title("Error Distribution (Prediction - Ground Truth)")
 plt.xlabel("Error")
 plt.ylabel("Frequency")
 plt.tight_layout()
-# plt.savefig("error_distribution.png")
+plt.savefig("output/error_distribution.png")
 plt.show()
