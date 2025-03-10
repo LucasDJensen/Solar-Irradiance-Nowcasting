@@ -1,67 +1,6 @@
 import torch
 from torch import nn as nn
 
-
-class LSTMEncoderDecoder(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, forecast_seq_len, num_layers=1):
-        """
-        Args:
-            input_size (int): Number of features in the input.
-            hidden_size (int): Hidden state size.
-            output_size (int): Number of output features (1 if predicting GHI).
-            forecast_seq_len (int): Length of the forecast sequence.
-            num_layers (int): Number of LSTM layers.
-        """
-        super(LSTMEncoderDecoder, self).__init__()
-        self.hidden_size = hidden_size
-        self.forecast_seq_len = forecast_seq_len
-
-        # Encoder LSTM that processes the input sequence
-        self.encoder = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-        # Decoder LSTM that generates the forecast one step at a time.
-        # It expects an input size of 1 because we feed back the previous output.
-        self.decoder = nn.LSTM(1, hidden_size, num_layers, batch_first=True)
-        # A fully connected layer to map the LSTM output to the target value.
-        self.fc = nn.Linear(hidden_size, output_size)
-
-    def forward(self, x, target=None, teacher_forcing_ratio=0.5):
-        """
-        Args:
-            x (Tensor): Input tensor of shape [batch, input_seq_len, features].
-            target (Tensor, optional): Ground truth tensor of shape [batch, forecast_seq_len, 1].
-            teacher_forcing_ratio (float): Probability of using teacher forcing.
-        Returns:
-            outputs (Tensor): Predictions of shape [batch, forecast_seq_len, output_size].
-        """
-        batch_size = x.size(0)
-        # Encode the input sequence
-        _, (hidden, cell) = self.encoder(x)  # hidden: (num_layers, batch, hidden_size)
-
-        # Initialize the decoder input (using zeros)
-        decoder_input = torch.zeros(batch_size, 1, 1, device=x.device)  # [batch, 1, 1]
-        outputs = []
-
-        for t in range(self.forecast_seq_len):
-            # Pass through decoder LSTM
-            out, (hidden, cell) = self.decoder(decoder_input, (hidden, cell))
-            # Map the output to the prediction using a linear layer
-            out = self.fc(out)  # [batch, 1, output_size]
-            outputs.append(out)
-
-            # Decide whether to use teacher forcing
-            if target is not None and torch.rand(1).item() < teacher_forcing_ratio:
-                # Use the ground truth value as the next input
-                # target[:, t] is of shape [batch, 1] so we unsqueeze to get [batch, 1, 1]
-                decoder_input = target[:, t].unsqueeze(1)
-            else:
-                # Use the prediction as the next input
-                decoder_input = out
-
-        # Concatenate all time steps to form the full sequence output
-        outputs = torch.cat(outputs, dim=1)  # [batch, forecast_seq_len, output_size]
-        return outputs
-
-
 # Encoder: Processes the input sequence and returns the final hidden and cell states.
 class Encoder(nn.Module):
     def __init__(self, input_size: int, hidden_size: int, num_layers: int):
@@ -102,8 +41,6 @@ class Seq2Seq(nn.Module):
         # Encode the input sequence
         hidden, cell = self.encoder(src)
 
-        # For the first decoder input, we use the last value of the source sequence.
-        # decoder_input = src[:, -1:, :]  # shape: (batch_size, 1, input_size)
         decoder_input = torch.zeros(batch_size, 1, 1, device=src.device)  # [batch, 1, 1]
 
         outputs = []
