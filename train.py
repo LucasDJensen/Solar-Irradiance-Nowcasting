@@ -7,15 +7,17 @@ from _config import GAP_THRESHOLD
 from data_loader import ProjectDataLoader
 from models import Encoder, Decoder, Seq2Seq
 
-# Initialize Weights & Biases
+# -----------------------------
+# 1. Parameters and Hyperparameters
+# -----------------------------
 LEARNING_RATE = 1e-5
 BATCH_SIZE = 32
 NUM_EPOCHS = 5
 INPUT_SEQ_LEN = 60  # Past 60 minutes as input
 FORECAST_SEQ_LEN = 60  # Forecast 60 minutes ahead
-HIDDEN_SIZE = 64
+HIDDEN_SIZE = 128
 OUTPUT_SIZE = 1  # predicting one feature (GHI)
-NUM_LSTM_LAYERS = 1
+NUM_LSTM_LAYERS = 2
 SPLIT = (0.65, 0.85)  # 65-85% for training; next 20% for validation; remaining 15% for test
 TEACHER_FORCING_RATIO = 0.25
 """
