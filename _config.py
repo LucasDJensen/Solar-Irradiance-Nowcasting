@@ -12,3 +12,6 @@ This gap threshold is used to skip sequences where the time difference between c
 
 This allows a few missing values within the threshold to be kept as a sequence, but if the gap is too large, the sequence is skipped.
 """
+
+for path in [PATH_OUTPUT, PATH_CHECKPOINT, PATH_RAW_DATA, PATH_PROCESSED_DATA, PATH_RAW_DTU_SOLAR_STATION]:
+    path.mkdir(parents=True, exist_ok=True)

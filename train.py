@@ -1,29 +1,32 @@
 import os
+
 import torch
 import torch.nn as nn
 import wandb
 from tqdm import tqdm
 
-from _config import GAP_THRESHOLD
+from _config import GAP_THRESHOLD, PATH_CHECKPOINT
 from data_loader import ProjectDataLoader
-from models import Encoder, Decoder, Seq2Seq
+from models import SimpleLSTM
 
 # -----------------------------
 # 1. Parameters and Hyperparameters
 # -----------------------------
-LEARNING_RATE = 1e-3
-BATCH_SIZE = 64
-NUM_EPOCHS = 5
-INPUT_SEQ_LEN = 60  # Past 60 minutes as input
-FORECAST_SEQ_LEN = 60  # Forecast 60 minutes ahead
-HIDDEN_SIZE = 128
-OUTPUT_SIZE = 1  # predicting one feature (GHI)
-NUM_LSTM_LAYERS = 3
-SPLIT = (0.65, 0.85)  # 65-85% for training; next 20% for validation; remaining 15% for test
-TEACHER_FORCING_RATIO = 0.7
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Set to True if you want to resume training from a checkpoint.
 RESUME = True
-CHECKPOINT_PATH = "checkpoints/checkpoint_1"
+
+LEARNING_RATE = 1e-3
+BATCH_SIZE = 32
+NUM_EPOCHS = 200
+INPUT_SEQ_LEN = 60  # Past 60 minutes as input
+FORECAST_SEQ_LEN = 60  # Forecast 60 minutes ahead
+HIDDEN_SIZE = 64
+OUTPUT_SIZE = 1  # predicting one feature (GHI)
+NUM_LSTM_LAYERS = 2
+SPLIT = (0.65, 0.85)  # 65-85% for training; next 20% for validation; remaining 15% for test
+TEACHER_FORCING_RATIO = 0.7
+SCHEDULER_PATIENCE = 5
 """
 Cumulative sum of Train/Validation/Test split.
 
@@ -33,81 +36,91 @@ Example: (0.6, 0.8) means 60% of the data is used for training, 20% for validati
 """
 TARGET = 'GHI'
 INCLUDE_DATASET_COLUMNS = ['wind_speed_avg', 'wind_dir_avg', 'air_temperature', 'air_pressure', 'relative_humidity', 'rain_duration', 'rain_intensity', 'solar_altitude', TARGET]
-wandb.init(project="solar-irradiance-nowcasting", entity="s210025-dtu",
-           config={"Model": "LSTM",
-                   "Dataset": "DTU Solar Station",
-                   "Learning Rate": LEARNING_RATE,
+
+# -----------------------------
+# 2. Initialize wandb with resume support
+# -----------------------------
+resume_flag = "allow" if RESUME else "never"
+wandb.init(project="solar-irradiance-nowcasting", entity="s210025-dtu", resume=resume_flag,
+           config={"Dataset": "DTU Solar Station",
                    "Batch Size": BATCH_SIZE,
-                   "No. Epochs": NUM_EPOCHS,
                    "Input sequence length": INPUT_SEQ_LEN,
                    "Forecast sequence length": FORECAST_SEQ_LEN,
                    "Hidden NN layer size": HIDDEN_SIZE,
                    "Output NN layer size": OUTPUT_SIZE,
                    "No. LSTM layers": NUM_LSTM_LAYERS,
                    "Target variable": TARGET,
-                   "Training variables": INCLUDE_DATASET_COLUMNS,
                    "Split": SPLIT,
                    "Teacher forcing ratio": TEACHER_FORCING_RATIO,
-                   "Gap threshold": GAP_THRESHOLD
+                   "Gap threshold": GAP_THRESHOLD,
+                   "Scheduler patience": SCHEDULER_PATIENCE
                    })
 
 # -----------------------------
-# 2. Data Loading and Preprocessing
+# 3. Data Loading and Preprocessing
 # -----------------------------
-data_loader = ProjectDataLoader(TARGET, INCLUDE_DATASET_COLUMNS, INPUT_SEQ_LEN, FORECAST_SEQ_LEN, GAP_THRESHOLD, SPLIT)
+data_loader = ProjectDataLoader(TARGET, INCLUDE_DATASET_COLUMNS, INPUT_SEQ_LEN, FORECAST_SEQ_LEN, GAP_THRESHOLD, SPLIT, device=device)
 data_loader.load_data()
+data_loader.feature_engineering()
 data_loader.transform_data()
 # -----------------------------
-# 3. Creating Sequences for Supervised Learning
+# 4. Creating Sequences for Supervised Learning
 # -----------------------------
-data_loader.create_sequences(data_loader.data)
+data_loader.create_sequences()
 
 print("X shape:", data_loader.X.shape)
 print("y shape:", data_loader.y.shape)
 # -----------------------------
-# 3. Chronological Train/Val/Test Split & PyTorch DataLoaders
+# 5. Chronological Train/Val/Test Split & PyTorch DataLoaders
 # -----------------------------
 data_loader.init_pytorch_datasets_and_loaders(BATCH_SIZE)
 # -----------------------------
-# 4. Model, Loss, Optimizer, and Scheduler Setup
+# 6. Model, Loss, Optimizer, and Scheduler Setup
 # -----------------------------
 input_size = data_loader.X.shape[2]  # number of features per time step
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = torch.device("cpu")
 
+model = SimpleLSTM(input_size, HIDDEN_SIZE, OUTPUT_SIZE, NUM_LSTM_LAYERS).to(device)
 
-# Instantiate the encoder, decoder, and the Seq2Seq model
-encoder = Encoder(input_size, HIDDEN_SIZE, NUM_LSTM_LAYERS).to(device)
-decoder = Decoder(OUTPUT_SIZE, HIDDEN_SIZE, NUM_LSTM_LAYERS).to(device)
-model = Seq2Seq(encoder, decoder, device).to(device)
-
-# -----------------------------
-# 6. Training the Model with Validation and ReduceLROnPlateau Scheduler
-# -----------------------------
 # criterion = NashSutcliffeEfficiencyLoss()
 criterion = nn.SmoothL1Loss()
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 # Define the scheduler (this will reduce the LR if the validation loss does not improve)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=1, verbose=True)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=SCHEDULER_PATIENCE, verbose=True)
 
+wandb.config.update({"Learning rate": LEARNING_RATE})
+wandb.config.update({"Model": model.__class__.__name__})
+wandb.config.update({"Input size": input_size})
+wandb.config.update({"Device": device})
+wandb.config.update({"Loss": criterion.__class__.__name__})
+wandb.config.update({"Optimizer": optimizer.__class__.__name__})
+wandb.config.update({"Scheduler": scheduler.__class__.__name__})
 wandb.watch(model, log="all")
 
 # -----------------------------
-# 5. Resume Training Setup
+# 7. Resume Training Setup (for model & optimizer)
 # -----------------------------
 start_epoch = 0
 
-if RESUME and os.path.exists(CHECKPOINT_PATH):
-    checkpoint = torch.load(CHECKPOINT_PATH, map_location=device)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-    start_epoch = checkpoint['epoch'] + 1
-    print(f"Resuming training from epoch {start_epoch}")
+if RESUME:
+    # Find all checkpoint files in the directory following the pattern checkpoint_{epoch}.pt
+    checkpoint_files = [f for f in os.listdir(PATH_CHECKPOINT)
+                        if f.startswith('checkpoint_') and f.endswith('.pt')]
+    if checkpoint_files:
+        # Sort files by epoch number in descending order and choose the latest checkpoint.
+        checkpoint_files.sort(key=lambda x: int(x.split('_')[1].split('.')[0]), reverse=True)
+        latest_checkpoint_file = checkpoint_files[0]
+        checkpoint_path = os.path.join(PATH_CHECKPOINT, latest_checkpoint_file)
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        start_epoch = checkpoint['epoch'] + 1
+        print(f"Resuming training from epoch {start_epoch} using checkpoint {latest_checkpoint_file}")
+    else:
+        print("No checkpoint found. Starting training from scratch.")
 
 # -----------------------------
-# 6. Training Loop with Checkpointing
+# 8. Training Loop with Checkpointing
 # -----------------------------
 for epoch in range(start_epoch, NUM_EPOCHS):
     TEACHER_FORCING_RATIO = max(0.25, 0.9 - epoch * 0.02)
@@ -120,7 +133,7 @@ for epoch in range(start_epoch, NUM_EPOCHS):
             batch_X, batch_y = batch_X.to(device), batch_y.to(device)
 
             optimizer.zero_grad()
-            predictions = model(batch_X, target=batch_y, target_length=FORECAST_SEQ_LEN, teacher_forcing_ratio=TEACHER_FORCING_RATIO)
+            predictions = model(batch_X)  # , target=batch_y, target_length=FORECAST_SEQ_LEN, teacher_forcing_ratio=TEACHER_FORCING_RATIO)
             loss = criterion(predictions, batch_y)
             loss.backward()
 
@@ -137,7 +150,7 @@ for epoch in range(start_epoch, NUM_EPOCHS):
     with torch.no_grad():
         for batch_X, batch_y in data_loader.val_loader:
             batch_X, batch_y = batch_X.to(device), batch_y.to(device)
-            predictions = model(batch_X, target=None, target_length=FORECAST_SEQ_LEN, teacher_forcing_ratio=0.0)  # no teacher forcing during evaluation
+            predictions = model(batch_X)  # , target=None, target_length=FORECAST_SEQ_LEN, teacher_forcing_ratio=0.0)  # no teacher forcing during evaluation
             loss = criterion(predictions, batch_y)
             val_loss += loss.item() * batch_X.size(0)
     val_loss /= len(data_loader.val_dataset)
@@ -160,7 +173,8 @@ for epoch in range(start_epoch, NUM_EPOCHS):
         'val_loss': val_loss
     }
 
-    torch.save(checkpoint, f'checkpoints/checkpoint_{epoch + 1}')
-    print(f"Checkpoint saved at epoch {epoch + 1}")
+    checkpoint_filename = f'checkpoint_{epoch + 1}.pt'
+    torch.save(checkpoint, PATH_CHECKPOINT / checkpoint_filename)
+    print(f"Checkpoint saved at epoch {epoch + 1} as {checkpoint_filename}")
 
 wandb.finish()

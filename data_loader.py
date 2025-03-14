@@ -1,19 +1,17 @@
 import pickle
 
-import numpy as np
 import pandas as pd
 import torch
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from torch.utils.data import Dataset, DataLoader, Subset
 
-from _config import FILE_PROCESSED_DTU_SOLAR_STATION
+from _config import FILE_PROCESSED_DTU_SOLAR_STATION, FILE_SCALARS
 from sequencing import create_sequences
 
 
 class ProjectDataLoader:
-    data: pd.DataFrame = None
-    X: np.ndarray = None
-    y: np.ndarray = None
+    X: pd.DataFrame = None
+    y: pd.DataFrame = None
 
     train_dataset: Subset = None
     val_dataset: Subset = None
@@ -22,8 +20,9 @@ class ProjectDataLoader:
     train_loader: DataLoader = None
     val_loader: DataLoader = None
     test_loader: DataLoader = None
+    device: str
 
-    def __init__(self, target, include_dataset_columns, input_seq_len, forecast_seq_len, gap_threshold, split):
+    def __init__(self, target, include_dataset_columns, input_seq_len, forecast_seq_len, gap_threshold, split, device='cpu'):
         """
         Initializes the DataProcessor with the required parameters.
 
@@ -42,6 +41,7 @@ class ProjectDataLoader:
         self.forecast_seq_len = forecast_seq_len
         self.gap_threshold = gap_threshold
         self.split = split
+        self.device = device
 
     def load_data(self):
         """Loads and preprocesses the dataset using a custom loader."""
@@ -60,52 +60,50 @@ class ProjectDataLoader:
         # drop rows where any value is missing
         data.dropna(inplace=True)
 
-        self.data = data
+        self.X = data.drop(self.target, axis=1)
+        self.y = data[self.target]
+
+    def feature_engineering(self, num_lags=5):
+        for i in range(1, num_lags + 1):
+            column_name = f'y_-{i}t'
+            self.X[column_name] = self.y.shift(-i)
+            self.include_dataset_columns.append(column_name)
 
     def transform_data(self):
-        # Separate the features and the target
-        data = self.data.copy()
-        features = data.drop(self.target, axis=1)
-        target = data[self.target]
-
         # Scale features using StandardScaler
         feature_scaler = StandardScaler()
-        scaled_features = feature_scaler.fit_transform(features)
+        scaled_features = feature_scaler.fit_transform(self.X)
 
         # Scale target using MinMaxScaler
         target_scaler = MinMaxScaler()
         # Reshape the target to 2D as expected by MinMaxScaler
-        scaled_target = target_scaler.fit_transform(target.values.reshape(-1, 1))
+        scaled_target = target_scaler.fit_transform(self.y.values.reshape(-1, 1))
 
         # (Optional) Create DataFrames from the scaled arrays
-        scaled_features_df = pd.DataFrame(scaled_features, columns=features.columns)
-        scaled_target_df = pd.DataFrame(scaled_target, columns=[target.name])
-
-        # If you want to combine them back into a single DataFrame
-        scaled_data = pd.concat([scaled_features_df, scaled_target_df], axis=1)
-        scaled_data.index = data.index
-
-        self.data = scaled_data
+        scaled_features_df = pd.DataFrame(scaled_features, columns=self.X.columns, index=self.X.index)
+        scaled_target_df = pd.DataFrame(scaled_target, columns=[self.target], index=self.y.index)
+        self.X = scaled_features_df
+        self.y = scaled_target_df
 
         # Store scalers for inverse transformations using pickle
         scalers = {"feature_scaler": feature_scaler, "target_scaler": target_scaler}
-        with open("scalers.pkl", "wb") as f:
+        with open(FILE_SCALARS, "wb") as f:
             pickle.dump(scalers, f)
 
-    def create_sequences(self, data):
+    def create_sequences(self):
         """Creates sequences for supervised learning and reshapes the target variable."""
 
         # Extract timestamps from the index (assumes a datetime index)
-        timestamps = data.index.to_numpy()
+        timestamps = self.X.index.to_numpy()
 
         # Create sequences for X and y using the custom function
         self.X, self.y = create_sequences(
-            data.to_numpy(),
-            timestamps,
-            self.input_seq_len,
-            self.forecast_seq_len,
+            X=self.X.to_numpy(),
+            y=self.y.to_numpy(),
+            timestamps=timestamps,
+            input_seq_len=self.input_seq_len,
+            forecast_seq_len=self.forecast_seq_len,
             gap_threshold=self.gap_threshold,
-            target_col_index=data.columns.get_loc(self.target)
         )
 
         # Reshape y to be 3D: [samples, forecast_seq_len, 1]
@@ -133,7 +131,7 @@ class ProjectDataLoader:
         return train_indices, val_indices, test_indices
 
     def init_pytorch_datasets_and_loaders(self, batch_size):
-        dataset = TimeSeriesDataset(self.X, self.y)
+        dataset = TimeSeriesDataset(self.X, self.y, device=self.device)
         train_indices, val_indices, test_indices = self.split_data()
         self.train_dataset = Subset(dataset, train_indices)
         self.val_dataset = Subset(dataset, val_indices)
@@ -145,9 +143,9 @@ class ProjectDataLoader:
 
 
 class TimeSeriesDataset(Dataset):
-    def __init__(self, X, y):
-        self.X = torch.tensor(X, dtype=torch.float32)  # [samples, seq_len, features]
-        self.y = torch.tensor(y, dtype=torch.float32)  # [samples, forecast_seq_len, 1]
+    def __init__(self, X, y, device='cpu'):
+        self.X = torch.tensor(X, dtype=torch.float32).to(device)  # [samples, seq_len, features]
+        self.y = torch.tensor(y, dtype=torch.float32).to(device)  # [samples, forecast_seq_len, 1]
 
     def __len__(self):
         return len(self.X)

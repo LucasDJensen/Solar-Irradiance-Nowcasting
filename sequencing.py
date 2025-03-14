@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def create_sequences(data_array, timestamps, input_seq_len, forecast_seq_len, gap_threshold=10, target_col_index=0):
+def create_sequences(X, y, timestamps, input_seq_len, forecast_seq_len, gap_threshold=10):
     """
     Generates sliding windows for sequence-to-sequence learning.
     Uses 'input_seq_len' minutes of past data to predict the next
@@ -19,8 +19,8 @@ def create_sequences(data_array, timestamps, input_seq_len, forecast_seq_len, ga
       X: NumPy array of input sequences
       y: NumPy array of corresponding target sequences
     """
-    X, y = [], []
-    total_length = len(data_array)
+    X_tmp, y_tmp = [], []
+    total_length = len(y)
     # Define the threshold as a timedelta (here, in minutes)
     gap_threshold_timedelta = np.timedelta64(gap_threshold, 'm')
 
@@ -34,7 +34,7 @@ def create_sequences(data_array, timestamps, input_seq_len, forecast_seq_len, ga
         if np.any(time_diffs > gap_threshold_timedelta):
             continue
         # Otherwise, create the sequence as before
-        X.append(data_array[i: i + input_seq_len])
-        y.append(data_array[i + input_seq_len: i + input_seq_len + forecast_seq_len, target_col_index])
-    return np.array(X), np.array(y)
+        X_tmp.append(X[i: i + input_seq_len])
+        y_tmp.append(y[i + input_seq_len: i + input_seq_len + forecast_seq_len])
+    return np.array(X_tmp), np.array(y_tmp)
 
