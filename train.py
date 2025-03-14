@@ -14,7 +14,7 @@ from models import SimpleLSTM
 # -----------------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Set to True if you want to resume training from a checkpoint.
-RESUME = True
+RESUME = False
 
 LEARNING_RATE = 1e-3
 BATCH_SIZE = 32
@@ -34,7 +34,7 @@ First value is the percentage of data used for training, second value is the per
 
 Example: (0.6, 0.8) means 60% of the data is used for training, 20% for validation, and the remaining 20% for testing.
 """
-TARGET = 'GHI'
+TARGET = 'DNI'
 INCLUDE_DATASET_COLUMNS = ['wind_speed_avg', 'wind_dir_avg', 'air_temperature', 'air_pressure', 'relative_humidity', 'rain_duration', 'rain_intensity', 'solar_altitude', TARGET]
 
 # -----------------------------
