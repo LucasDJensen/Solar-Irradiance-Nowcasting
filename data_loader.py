@@ -1,5 +1,6 @@
 import pickle
 
+import numpy as np
 import pandas as pd
 import torch
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -27,7 +28,7 @@ class ProjectDataLoader:
         Initializes the DataProcessor with the required parameters.
 
         Parameters:
-            target (str): The target column name.
+            target (list): The target column name.
             include_dataset_columns (list): List of dataset columns to include.
             input_seq_len (int): Length of the input sequence.
             forecast_seq_len (int): Length of the forecast sequence.
@@ -48,22 +49,12 @@ class ProjectDataLoader:
         with open(FILE_PROCESSED_DTU_SOLAR_STATION, 'rb') as f:
             data: pd.DataFrame = pickle.load(f)
 
-        # Select only the columns we are interested in
-        data = data[self.include_dataset_columns]
+        data = data.loc['2022-01-01']
 
-        # Optional filtering of data
-        data = data.loc['2022']
-
-        # We are only interested in the data where the solar altitude is greater than 0 because the sun is below the horizon otherwise
-        data = data[data['solar_altitude'] > 0]
-
-        # drop rows where any value is missing
-        data.dropna(inplace=True)
-
-        self.X = data.drop(self.target, axis=1)
+        self.X = data.drop(columns=self.target, axis=1)
         self.y = data[self.target]
 
-    def feature_engineering(self, num_lags=5):
+    def feature_engineering(self, num_lags=60):
         for i in range(1, num_lags + 1):
             column_name = f'y_-{i}t'
             self.X[column_name] = self.y.shift(-i)
@@ -81,7 +72,7 @@ class ProjectDataLoader:
 
         # (Optional) Create DataFrames from the scaled arrays
         scaled_features_df = pd.DataFrame(scaled_features, columns=self.X.columns, index=self.X.index)
-        scaled_target_df = pd.DataFrame(scaled_target, columns=[self.target], index=self.y.index)
+        scaled_target_df = pd.DataFrame(scaled_target, columns=self.target, index=self.y.index)
         self.X = scaled_features_df
         self.y = scaled_target_df
 
@@ -91,23 +82,44 @@ class ProjectDataLoader:
             pickle.dump(scalers, f)
 
     def create_sequences(self):
-        """Creates sequences for supervised learning and reshapes the target variable."""
+        """
+        Creates sliding window sequences for supervised learning and reshapes the target variable.
+        Uses `input_seq_len` minutes of past data to predict the next `forecast_seq_len` values.
 
+        Assumes that:
+          - self.X is a pandas DataFrame with a DateTimeIndex.
+          - self.y is the corresponding target variable.
+          - self.input_seq_len, self.forecast_seq_len, and self.gap_threshold are set.
+        """
         # Extract timestamps from the index (assumes a datetime index)
         timestamps = self.X.index.to_numpy()
 
-        # Create sequences for X and y using the custom function
-        self.X, self.y = create_sequences(
-            X=self.X.to_numpy(),
-            y=self.y.to_numpy(),
-            timestamps=timestamps,
-            input_seq_len=self.input_seq_len,
-            forecast_seq_len=self.forecast_seq_len,
-            gap_threshold=self.gap_threshold,
-        )
+        # Convert X and y to NumPy arrays
+        X_array = self.X.to_numpy()
+        y_array = self.y.to_numpy()
 
-        # Reshape y to be 3D: [samples, forecast_seq_len, 1]
-        self.y = self.y.reshape((self.y.shape[0], self.y.shape[1], 1))
+        X_sequences, y_sequences = [], []
+        total_length = len(y_array)
+
+        # Define the threshold as a timedelta (in minutes)
+        gap_threshold_timedelta = np.timedelta64(self.gap_threshold, 'm')
+
+        # Generate sliding window sequences
+        for i in range(total_length - self.input_seq_len - self.forecast_seq_len + 1):
+            # Get timestamps for the entire sequence (input + forecast)
+            seq_timestamps = timestamps[i: i + self.input_seq_len + self.forecast_seq_len]
+            # Calculate differences between consecutive timestamps
+            if np.any(np.diff(seq_timestamps) > gap_threshold_timedelta):
+                continue  # Skip this sequence if any gap is too large
+
+            # Append input sequence and forecast sequence
+            X_sequences.append(X_array[i: i + self.input_seq_len])
+            y_sequences.append(y_array[i + self.input_seq_len: i + self.input_seq_len + self.forecast_seq_len])
+
+        # Update the instance variables with the new sequences.
+        self.X = np.array(X_sequences)
+        self.y = np.array(y_sequences).reshape(-1, self.forecast_seq_len, len(self.target))
+
 
     def split_data(self):
         """

@@ -1,6 +1,9 @@
 from pathlib import Path
 
 PROJECT_ROOT = Path(r'D:\Jetbrains\Python\Projects\solar_irradiance_nowcasting')
+PATH_OUTPUT = PROJECT_ROOT / 'output'
+PATH_CHECKPOINT = PROJECT_ROOT / 'checkpoint'
+FILE_SCALARS = PATH_OUTPUT / 'scalers.pkl'
 PATH_RAW_DATA = PROJECT_ROOT / 'data' / 'raw'
 PATH_PROCESSED_DATA = PROJECT_ROOT / 'data' / 'processed'
 
