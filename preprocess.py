@@ -4,15 +4,13 @@ from astral.sun import elevation
 
 from _config import PATH_RAW_DTU_SOLAR_STATION, FILE_PROCESSED_DTU_SOLAR_STATION, FILE_SCALARS
 
-PATH_RAW_DTU_SOLAR_STATION.mkdir(parents=True, exist_ok=True)
-FILE_PROCESSED_DTU_SOLAR_STATION.parent.mkdir(parents=True, exist_ok=True)
-
 # Get all CSV files in the path folder
 csv_files = list(PATH_RAW_DTU_SOLAR_STATION.glob("*.csv"))
 
 # Read each CSV file and combine them into a single DataFrame
 dfs = [pd.read_csv(f) for f in csv_files]
 df = pd.concat(dfs, ignore_index=True)
+
 # Remove the LWD column as it contains quite a bit of NaN values
 df.drop(columns=['LWD'], inplace=True)
 # Remove the GHI column as it is a sum of DNI and DHI
@@ -28,6 +26,9 @@ df.dropna(inplace=True)
 df.set_index('Time(utc)', inplace=True)
 df.index = pd.to_datetime(df.index)
 df.sort_index(inplace=True)
+# Remove data from 2021-01-05 to 2021-02-23
+mask = (df.index < "2021-01-05") | (df.index > "2021-02-23")
+df = df[mask].copy()
 
 # Define location information for DTU Lyngby (Building 119)
 location = LocationInfo(

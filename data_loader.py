@@ -49,7 +49,7 @@ class ProjectDataLoader:
         with open(FILE_PROCESSED_DTU_SOLAR_STATION, 'rb') as f:
             data: pd.DataFrame = pickle.load(f)
 
-        data = data.loc['2022-01-01']
+        data = data.loc['2022']
 
         self.X = data.drop(columns=self.target, axis=1)
         self.y = data[self.target]

@@ -5,8 +5,9 @@ import torch.nn as nn
 import wandb
 from tqdm import tqdm
 
+from ForecastEvaluator import ForecastEvaluator  # Utility class for evaluation metrics
 from _config import GAP_THRESHOLD, PATH_CHECKPOINT
-from model import DEVICE, INPUT_SEQ_LEN, FORECAST_SEQ_LEN, HIDDEN_SIZE, NUM_LSTM_LAYERS, SPLIT, TARGETS, OUTPUT_SIZE, BATCH_SIZE, data_loader, input_size, model
+from model import DEVICE, INPUT_SEQ_LEN, FORECAST_SEQ_LEN, HIDDEN_SIZE, NUM_LSTM_LAYERS, SPLIT, TARGETS, OUTPUT_SIZE, BATCH_SIZE, data_loader, model
 
 # -----------------------------
 # 1. Parameters and Hyperparameters
@@ -15,8 +16,8 @@ from model import DEVICE, INPUT_SEQ_LEN, FORECAST_SEQ_LEN, HIDDEN_SIZE, NUM_LSTM
 RESUME = False
 
 LEARNING_RATE = 1e-3
-NUM_EPOCHS = 1
-TEACHER_FORCING_RATIO = 0.7
+NUM_EPOCHS = 200
+# TEACHER_FORCING_RATIO = 0.7
 SCHEDULER_PATIENCE = 5
 
 # -----------------------------
@@ -33,22 +34,22 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', fa
 resume_flag = "allow" if RESUME else "never"
 wandb.init(project="solar-irradiance-nowcasting", entity="s210025-dtu", resume=resume_flag,
            config={"Dataset": "DTU Solar Station",
-                     "Model": "SimpleLSTM",
-                        "Input Sequence Length": INPUT_SEQ_LEN,
-                        "Forecast Sequence Length": FORECAST_SEQ_LEN,
-                        "Hidden Size": HIDDEN_SIZE,
-                        "LSTM Layers": NUM_LSTM_LAYERS,
-                        "Batch Size": BATCH_SIZE,
-                        "Learning Rate": LEARNING_RATE,
-                        "Teacher Forcing Ratio": TEACHER_FORCING_RATIO,
-                        "Scheduler Patience": SCHEDULER_PATIENCE,
-                        "Split": SPLIT,
-                        "Gap Threshold": GAP_THRESHOLD,
-                        "Targets": TARGETS,
-                        "Output Size": OUTPUT_SIZE,
-                        "Loss": criterion,
-                        "Optimizer": optimizer,
-                        "Scheduler": scheduler
+                   "Model": "SimpleLSTM",
+                   "Input Sequence Length": INPUT_SEQ_LEN,
+                   "Forecast Sequence Length": FORECAST_SEQ_LEN,
+                   "Hidden Size": HIDDEN_SIZE,
+                   "LSTM Layers": NUM_LSTM_LAYERS,
+                   "Batch Size": BATCH_SIZE,
+                   "Learning Rate": LEARNING_RATE,
+                   # "Teacher Forcing Ratio": TEACHER_FORCING_RATIO,
+                   "Scheduler Patience": SCHEDULER_PATIENCE,
+                   "Split": SPLIT,
+                   "Gap Threshold": GAP_THRESHOLD,
+                   "Targets": TARGETS,
+                   "Output Size": OUTPUT_SIZE,
+                   "Loss": criterion,
+                   "Optimizer": optimizer,
+                   "Scheduler": scheduler
                    })
 
 wandb.watch(model, log="all")
@@ -104,14 +105,40 @@ for epoch in range(start_epoch, NUM_EPOCHS):
     # Validation
     model.eval()
     val_loss = 0.0
+    all_val_preds = []
+    all_val_truths = []
     with torch.no_grad():
         for batch_X, batch_y in data_loader.val_loader:
             batch_X, batch_y = batch_X.to(DEVICE), batch_y.to(DEVICE)
-            predictions = model(batch_X)  # , target=None, target_length=FORECAST_SEQ_LEN, teacher_forcing_ratio=0.0)  # no teacher forcing during evaluation
+            predictions = model(batch_X)
             loss = criterion(predictions, batch_y)
             val_loss += loss.item() * batch_X.size(0)
+
+            # Accumulate predictions and ground truths.
+            all_val_preds.append(predictions.cpu().numpy())
+            all_val_truths.append(batch_y.cpu().numpy())
+
     val_loss /= len(data_loader.val_dataset)
     wandb.log({"epoch": epoch + 1, "val_loss": val_loss})
+
+    # Concatenate all predictions and truths.
+    import numpy as np
+
+    val_preds = np.concatenate(all_val_preds, axis=0)
+    val_truths = np.concatenate(all_val_truths, axis=0)
+
+    # Compute additional metrics.
+    evaluator = ForecastEvaluator(val_truths.flatten(), val_preds.flatten())
+    eval_metrics = evaluator.evaluate_all()
+
+    # Log the computed metrics.
+    wandb.log({
+        "R2": eval_metrics["R2"],
+        "NMAE": eval_metrics["NMAE"],
+        "NRMSE": eval_metrics["NRMSE"],
+        "Skill Score": eval_metrics["Skill Score"]
+    })
+
     print(f"Epoch {epoch + 1}/{NUM_EPOCHS}, Train Loss: {epoch_loss:.6f}, Val Loss: {val_loss:.6f}")
 
     # Update the learning rate based on the validation loss
@@ -121,17 +148,18 @@ for epoch in range(start_epoch, NUM_EPOCHS):
     print(f"Updated learning rate: {current_lr:.6f}")
 
     # Save checkpoint at the end of every epoch
-    checkpoint = {
-        'epoch': epoch,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'scheduler_state_dict': scheduler.state_dict(),
-        'train_loss': epoch_loss,
-        'val_loss': val_loss
-    }
+    if epoch % 10 == 0:
+        checkpoint = {
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict(),
+            'train_loss': epoch_loss,
+            'val_loss': val_loss
+        }
 
-    checkpoint_filename = f'checkpoint_{epoch + 1}.pt'
-    torch.save(checkpoint, PATH_CHECKPOINT / checkpoint_filename)
-    print(f"Checkpoint saved at epoch {epoch + 1} as {checkpoint_filename}")
+        checkpoint_filename = f'checkpoint_{epoch + 1}.pt'
+        torch.save(checkpoint, PATH_CHECKPOINT / checkpoint_filename)
+        print(f"Checkpoint saved at epoch {epoch + 1} as {checkpoint_filename}")
 
 wandb.finish()
