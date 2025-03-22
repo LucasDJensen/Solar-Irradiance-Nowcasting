@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from ForecastEvaluator import ForecastEvaluator  # your utility class for metrics
-from model import data_loader, DEVICE
 
 # Loop over the test loader and process one batch for evaluation.
 for batch_X, batch_y in tqdm(data_loader.test_loader, desc="Evaluating"):
