@@ -5,12 +5,12 @@ TARGETS = ['DNI', 'DHI']
 INPUT_SEQ_LEN = 60  # Past 60 minutes as input
 FORECAST_SEQ_LEN = 60  # Forecast 60 minutes ahead
 
-NUM_LSTM_LAYERS = 3
-HIDDEN_SIZE = 128
+NUM_LSTM_LAYERS = 2
+HIDDEN_SIZE = 32
 OUTPUT_SIZE = len(TARGETS)  # predicting two features (DNI, DHI)
 
 BATCH_SIZE = 128
-SPLIT = (0.65, 0.85)  # 65-85% for training; next 20% for validation; remaining 15% for test
+SPLIT = (0.7, 0.85)  # 65-85% for training; next 20% for validation; remaining 15% for test
 """
 Cumulative sum of Train/Validation/Test split.
 
@@ -36,7 +36,7 @@ def main():
     from torch.utils.data import Dataset, DataLoader, Subset
 
     class TimeSeriesDataset(Dataset):
-        def __init__(self, X, y, device):
+        def __init__(self, X:np.ndarray, y:np.ndarray, device):
             self.X = torch.tensor(X, dtype=torch.float32).to(device)  # [samples, seq_len, features]
             self.y = torch.tensor(y, dtype=torch.float32).to(device)  # [samples, forecast_seq_len, 1]
 
@@ -62,6 +62,49 @@ def main():
     # -----------------------------
     # 4. Creating Sequences for Supervised Learning
     # -----------------------------
+    import numpy as np
+
+    def create_sequences(X, y, timestamps, input_seq_len, forecast_seq_len, gap_threshold=15):
+        """
+        Generates sliding windows for sequence-to-sequence learning.
+        Uses 'input_seq_len' minutes of past data to predict the next
+        'forecast_seq_len' values for the target feature.
+
+        Parameters:
+          data_array: NumPy array of shape (n_samples, n_features)
+          timestamps: NumPy array of datetime64 values corresponding to each row in data_array
+          input_seq_len: int, number of time steps for input
+          forecast_seq_len: int, number of time steps for forecasting
+          gap_threshold: int, maximum allowed gap (in minutes) between consecutive time stamps
+          target_col_index: int, index of the target column in data_array
+
+        Returns:
+          X: NumPy array of input sequences
+          y: NumPy array of corresponding target sequences
+        """
+        X_tmp, y_tmp = [], []
+        total_length = len(y)
+        # Define the threshold as a timedelta (here, in minutes)
+        gap_threshold_timedelta = np.timedelta64(gap_threshold, 'm')
+
+        # Slide over the data
+        for i in range(total_length - input_seq_len - forecast_seq_len + 1):
+            # Get timestamps for the entire sequence (input and forecast)
+            seq_timestamps = timestamps[i: i + input_seq_len + forecast_seq_len]
+            # Calculate differences between consecutive timestamps
+            time_diffs = np.diff(seq_timestamps)
+            # If any gap is larger than the allowed threshold, skip this sequence
+            if np.any(time_diffs > gap_threshold_timedelta):
+                continue
+            # Otherwise, create the sequence as before
+            X_tmp.append(X[i: i + input_seq_len])
+            y_tmp.append(y[i + input_seq_len: i + input_seq_len + forecast_seq_len])
+        return np.array(X_tmp), np.array(y_tmp)
+
+    print('Before sequencing:', X.shape, y.shape)
+    X,y = create_sequences(X.to_numpy(), y.to_numpy(), df.index.to_numpy(), INPUT_SEQ_LEN, FORECAST_SEQ_LEN, GAP_THRESHOLD)
+    print('After sequencing:', X.shape, y.shape)
+
     total_samples = X.shape[0]
     train_end = int(SPLIT[0] * total_samples)  # e.g., 65% for training
     val_end = int(SPLIT[1] * total_samples)  # e.g., next 20% for validation
@@ -70,7 +113,7 @@ def main():
     val_indices = list(range(train_end, val_end))
     test_indices = list(range(val_end, total_samples))
 
-    dataset = TimeSeriesDataset(X.to_numpy(), y.to_numpy(), device=device)
+    dataset = TimeSeriesDataset(X, y, device=device)
     train_dataset = Subset(dataset, train_indices)
     val_dataset = Subset(dataset, val_indices)
     test_dataset = Subset(dataset, test_indices)
@@ -79,7 +122,7 @@ def main():
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
-    input_size = X.shape[1]  # number of features per time step
+    input_size = X.shape[2]  # number of features per time step
     model = SimpleLSTM(input_size, HIDDEN_SIZE, OUTPUT_SIZE, NUM_LSTM_LAYERS).to(device)
 
     # -----------------------------
