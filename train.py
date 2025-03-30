@@ -118,7 +118,7 @@ def main():
     val_dataset = Subset(dataset, val_indices)
     test_dataset = Subset(dataset, test_indices)
 
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=False)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
