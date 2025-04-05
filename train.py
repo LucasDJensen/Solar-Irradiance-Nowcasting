@@ -64,7 +64,7 @@ def main():
     # -----------------------------
     import numpy as np
 
-    def create_sequences(X, y, timestamps, input_seq_len, forecast_seq_len, gap_threshold=15):
+    def create_sequences(X, y, timestamps, input_seq_len, gap_threshold=1):
         """
         Generates sliding windows for sequence-to-sequence learning.
         Uses 'input_seq_len' minutes of past data to predict the next
@@ -88,9 +88,9 @@ def main():
         gap_threshold_timedelta = np.timedelta64(gap_threshold, 'm')
 
         # Slide over the data
-        for i in range(total_length - input_seq_len - forecast_seq_len + 1):
+        for i in range(total_length - input_seq_len + 1):
             # Get timestamps for the entire sequence (input and forecast)
-            seq_timestamps = timestamps[i: i + input_seq_len + forecast_seq_len]
+            seq_timestamps = timestamps[i: i + input_seq_len]
             # Calculate differences between consecutive timestamps
             time_diffs = np.diff(seq_timestamps)
             # If any gap is larger than the allowed threshold, skip this sequence
@@ -98,7 +98,7 @@ def main():
                 continue
             # Otherwise, create the sequence as before
             X_tmp.append(X[i: i + input_seq_len])
-            y_tmp.append(y[i + input_seq_len: i + input_seq_len + forecast_seq_len])
+            y_tmp.append(y[i: i + input_seq_len])
         return np.array(X_tmp), np.array(y_tmp)
 
     print('Before sequencing:', X.shape, y.shape)

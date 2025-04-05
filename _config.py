@@ -10,7 +10,7 @@ PATH_PROCESSED_DATA = PROJECT_ROOT / 'data' / 'processed'
 PATH_RAW_DTU_SOLAR_STATION = PATH_RAW_DATA / 'dtu_solar_station'
 PKL_PROCESSED_STEP1_DTU_SOLAR_STATION = PATH_PROCESSED_DATA / 'dtu_solar_station' / "preprocessed_data_step1.pkl"
 PKL_PROCESSED_STEP2_DTU_SOLAR_STATION = PATH_PROCESSED_DATA / 'dtu_solar_station' / "preprocessed_data_step2.pkl"
-GAP_THRESHOLD = 10
+GAP_THRESHOLD = 1
 """
 This gap threshold is used to skip sequences where the time difference between consecutive timestamps is larger than this value.
 
