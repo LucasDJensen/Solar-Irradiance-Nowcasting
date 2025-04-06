@@ -49,10 +49,31 @@ class ForecastEvaluator:
         The climatology is defined as the mean of the true values.
         """
         mse_model = mean_squared_error(y_true, y_pred)
-        # Climatology forecast: using the mean of the observed values.
         climatology = np.full_like(y_true, fill_value=y_true.mean())
         mse_climatology = mean_squared_error(y_true, climatology)
         return 1 - (mse_model / mse_climatology) if mse_climatology != 0 else np.nan
+
+    @staticmethod
+    def compute_rmse(y_true, y_pred):
+        """
+        Compute the root mean squared error (RMSE).
+        """
+        mse = mean_squared_error(y_true, y_pred)
+        return np.sqrt(mse)
+
+    @staticmethod
+    def compute_mae(y_true, y_pred):
+        """
+        Compute the mean absolute error (MAE).
+        """
+        return mean_absolute_error(y_true, y_pred)
+
+    @staticmethod
+    def compute_mbe(y_true, y_pred):
+        """
+        Compute the mean bias error (MBE).
+        """
+        return np.mean(y_pred - y_true)
 
     def evaluate_all(self):
         """
@@ -62,6 +83,9 @@ class ForecastEvaluator:
             'R2': self.compute_r2(self.y_true, self.y_pred),
             'NMAE': self.compute_nmae(self.y_true, self.y_pred),
             'NRMSE': self.compute_nrmse(self.y_true, self.y_pred),
-            'Skill Score': self.compute_skill_score(self.y_true, self.y_pred)
+            'Skill Score': self.compute_skill_score(self.y_true, self.y_pred),
+            'RMSE': self.compute_rmse(self.y_true, self.y_pred),
+            'MAE': self.compute_mae(self.y_true, self.y_pred),
+            'MBE': self.compute_mbe(self.y_true, self.y_pred),
         }
         return metrics

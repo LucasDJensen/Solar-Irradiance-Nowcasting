@@ -3,13 +3,13 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import torch.nn as nn
 import wandb
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
+import optuna
 from ForecastEvaluator import ForecastEvaluator  # Utility class for evaluation metrics
-from _config import GAP_THRESHOLD, PATH_CHECKPOINT
+from _config import PATH_CHECKPOINT
 from models import SimpleLSTM
 
 
@@ -62,7 +62,7 @@ def load_checkpoint(device, model, optimizer):
     return start_epoch
 
 
-def train_model(criterion, device, epoch, model, optimizer, train_dataset, train_loader):
+def train_model(criterion, device, epoch, model, optimizer, train_loader, clip_grad_norm):
     model.train()
     epoch_loss = 0.0
     with tqdm(train_loader, unit="batch") as tepoch:
@@ -75,13 +75,13 @@ def train_model(criterion, device, epoch, model, optimizer, train_dataset, train
             loss = criterion(predictions, batch_y)
             loss.backward()
 
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_grad_norm)
 
             optimizer.step()
 
             epoch_loss += loss.item() * batch_X.size(0)
             tepoch.set_postfix(loss=loss.item())
-    epoch_loss /= len(train_loader.dataset)
+    epoch_loss /= len(train_loader)
     wandb.log({"epoch": epoch, "train_loss": epoch_loss, "lr": optimizer.param_groups[0]["lr"]})
     return epoch_loss
 
@@ -100,9 +100,9 @@ def validate_model(criterion, device, epoch, model, val_loader):
             val_loss += loss.item() * batch_X.size(0)
 
             # Accumulate predictions and ground truths.
-            all_val_preds.append(predictions.detach().cpu().float().numpy())
-            all_val_truths.append(batch_y.detach().cpu().float().numpy())
-    val_loss /= len(val_loader.dataset)
+            all_val_preds.append(predictions.cpu().numpy())
+            all_val_truths.append(batch_y.cpu().numpy())
+    val_loss /= len(val_loader)
     wandb.log({"epoch": epoch, "val_loss": val_loss})
     # Concatenate all predictions and truths.
     val_preds = np.concatenate(all_val_preds, axis=0)
@@ -147,66 +147,80 @@ def save_checkpoint(epoch, epoch_loss, model, optimizer, val_loss):
     print(f"Checkpoint saved at epoch {epoch} as {checkpoint_filename}")
 
 
-def main():
-    TARGETS = ['DNI', 'DHI']
-    INPUT_SEQ_LEN = 60  # Past 60 minutes as input
+# Constants
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+INPUT_SIZE = 8  # Update if you're using multivariate input
+OUTPUT_SIZE = 2
+EPOCHS = 20  # You can increase for real sweep
+PROJECT_NAME = "solar-nowcasting-optuna"
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    NUM_LSTM_LAYERS = 1
-    HIDDEN_SIZE = 128
-    OUTPUT_SIZE = len(TARGETS)  # predicting two features (DNI, DHI)
 
-    BATCH_SIZE = 128
+# Objective function for Optuna
+def objective(trial):
+    # Sample hyperparameters
+    hidden_size = trial.suggest_categorical("hidden_size", [64, 128, 256])
+    num_layers = trial.suggest_int("num_layers", 1, 3)
+    dropout = trial.suggest_float("dropout", 0.1, 0.5)
+    lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
+    batch_size = trial.suggest_categorical("batch_size", [32, 64, 128])
+    clip_grad_norm = trial.suggest_float("clip_grad_norm", 0.5, 5.0)
 
-    RESUME = False
+    # Initialize Weights & Biases
+    wandb.init(
+        project=PROJECT_NAME,
+        config={
+            "hidden_size": hidden_size,
+            "num_layers": num_layers,
+            "dropout": dropout,
+            "lr": lr,
+            "batch_size": batch_size,
+            "clip_grad_norm": clip_grad_norm,
+            "epochs": EPOCHS
+        },
+        reinit=True
+    )
 
-    LEARNING_RATE = 1e-3
-    NUM_EPOCHS = 200
-    DROPOUT = 0.5
+    # Load data
+    train_dataset, val_dataset, train_loader, val_loader = load_dataset(device, batch_size)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Initialize model
+    model = SimpleLSTM(INPUT_SIZE, hidden_size, OUTPUT_SIZE, num_layers, dropout=dropout).to(DEVICE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    criterion = torch.nn.MSELoss()
 
-    train_dataset, train_loader, val_dataset, val_loader = load_dataset(device, BATCH_SIZE)
+    best_val_loss = float("inf")
+    for epoch in range(1, EPOCHS + 1):
+        train_loss = train_model(
+            model=model,
+            train_loader=train_loader,
+            criterion=criterion,
+            optimizer=optimizer,
+            device=DEVICE,
+            epoch=epoch,
+            clip_grad_norm=clip_grad_norm  # Pass it in if your train_loop supports it
+        )
 
-    input_size = train_dataset.X.shape[2]  # number of features per time step
-    model = SimpleLSTM(input_size, HIDDEN_SIZE, OUTPUT_SIZE, NUM_LSTM_LAYERS, dropout=DROPOUT).to(device)
+        val_loss = validate_model(
+            criterion=criterion,
+            device=DEVICE,
+            epoch=epoch,
+            model=model,
+            val_loader=val_loader
+        )
 
-    criterion = nn.SmoothL1Loss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-
-    wandb.init(project="solar-irradiance-nowcasting", entity="s210025-dtu",
-               config={"Dataset": "DTU Solar Station",
-                       "Model": "SimpleLSTM",
-                       "Input Sequence Length": INPUT_SEQ_LEN,
-                       "Hidden Size": HIDDEN_SIZE,
-                       "LSTM Layers": NUM_LSTM_LAYERS,
-                       "Batch Size": BATCH_SIZE,
-                       "Learning Rate": LEARNING_RATE,
-                       "Gap Threshold": GAP_THRESHOLD,
-                       "Targets": TARGETS,
-                       "Output Size": OUTPUT_SIZE,
-                       "Loss": criterion,
-                       "Optimizer": optimizer,
-                       "Dropout": DROPOUT,
-                       })
-
-    wandb.watch(model, log="all")
-
-    start_epoch = 1
-
-    if RESUME:
-        start_epoch = load_checkpoint(device, model, optimizer)
-
-    for epoch in range(start_epoch, NUM_EPOCHS + 1):
-        epoch_loss = train_model(criterion, device, epoch, model, optimizer, train_dataset, train_loader)
-        val_loss = validate_model(criterion, device, epoch, model, val_dataset, val_loader)
-
-        print(f"Epoch {epoch}/{NUM_EPOCHS}, Train Loss: {epoch_loss:.6f}, Val Loss: {val_loss:.6f}")
-
-        if epoch % 10 == 0:
-            save_checkpoint(epoch, epoch_loss, model, optimizer, val_loss)
+        wandb.log({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
 
     wandb.finish()
+    return best_val_loss
 
 
+# Run the sweep
 if __name__ == "__main__":
-    main()
+    study = optuna.create_study(direction="minimize")
+    study.optimize(objective, n_trials=30)
+
+    print("Best trial:")
+    print(study.best_trial.params)
