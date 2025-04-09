@@ -152,11 +152,11 @@ PROJECT_NAME = "solar-nowcasting-optuna"
 # Objective function for Optuna
 def objective(trial):
     # Sample hyperparameters
-    hidden_size = trial.suggest_categorical("hidden_size", [64, 128, 256, 512, 1024])
-    num_layers = trial.suggest_int("num_layers", 1, 5)
+    hidden_size = trial.suggest_categorical("hidden_size", [64, 128, 256])
+    num_layers = trial.suggest_int("num_layers", 1, 3)
     dropout = trial.suggest_float("dropout", 0.1, 0.5)
     lr = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
-    batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
+    batch_size = trial.suggest_categorical("batch_size", [32, 64, 128, 256, 512])
     clip_grad_norm = trial.suggest_float("clip_grad_norm", 0.5, 5.0)
     teacher_forcing_ratio = trial.suggest_float("teacher_forcing_ratio", 0.0, 0.8)
 
