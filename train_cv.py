@@ -11,7 +11,7 @@ from tqdm import tqdm
 import optuna
 from ForecastEvaluator import ForecastEvaluator  # Utility class for evaluation metrics
 from _config import PATH_CHECKPOINT
-from models import SimpleLSTM
+from models import *
 
 
 class TimeSeriesDataset(Dataset):
@@ -63,7 +63,7 @@ def load_checkpoint(device, model, optimizer):
     return start_epoch
 
 
-def train_model(criterion, device, epoch, model, optimizer, train_loader, clip_grad_norm):
+def train_model(criterion, device, epoch, model, optimizer, train_loader, clip_grad_norm, teacher_forcing_ratio):
     model.train()
     epoch_loss = 0.0
     with tqdm(train_loader, unit="batch") as tepoch:
@@ -72,6 +72,7 @@ def train_model(criterion, device, epoch, model, optimizer, train_loader, clip_g
             batch_X, batch_y = batch_X.to(device), batch_y.to(device)
 
             optimizer.zero_grad()
+            # predictions = model(batch_X, batch_y, teacher_forcing_ratio)
             predictions = model(batch_X)
             loss = criterion(predictions, batch_y)
             loss.backward()
@@ -82,7 +83,7 @@ def train_model(criterion, device, epoch, model, optimizer, train_loader, clip_g
 
             epoch_loss += loss.item() * batch_X.size(0)
             tepoch.set_postfix(loss=loss.item())
-    epoch_loss /= len(train_loader)
+    epoch_loss /= len(train_loader.dataset)
     wandb.log({"epoch": epoch, "train_loss": epoch_loss, "lr": optimizer.param_groups[0]["lr"]})
     return epoch_loss
 
@@ -103,7 +104,7 @@ def validate_model(criterion, device, epoch, model, val_loader):
             # Accumulate predictions and ground truths.
             all_val_preds.append(predictions.cpu().numpy())
             all_val_truths.append(batch_y.cpu().numpy())
-    val_loss /= len(val_loader)
+    val_loss /= len(val_loader.dataset)
     wandb.log({"epoch": epoch, "val_loss": val_loss})
     # Concatenate all predictions and truths.
     val_preds = np.concatenate(all_val_preds, axis=0)
@@ -154,9 +155,10 @@ def objective(trial):
     hidden_size = trial.suggest_categorical("hidden_size", [64, 128, 256, 512, 1024])
     num_layers = trial.suggest_int("num_layers", 1, 5)
     dropout = trial.suggest_float("dropout", 0.1, 0.5)
-    lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
+    lr = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
     batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
     clip_grad_norm = trial.suggest_float("clip_grad_norm", 0.5, 5.0)
+    teacher_forcing_ratio = trial.suggest_float("teacher_forcing_ratio", 0.0, 0.8)
 
     # Initialize Weights & Biases
     wandb.init(
@@ -168,13 +170,14 @@ def objective(trial):
             "lr": lr,
             "batch_size": batch_size,
             "clip_grad_norm": clip_grad_norm,
-            "epochs": EPOCHS
+            "epochs": EPOCHS,
+            "teacher_forcing_ratio": teacher_forcing_ratio
         },
         reinit=True
     )
 
     # Load data
-    train_dataset, val_dataset, train_loader, val_loader = load_dataset(DEVICE, batch_size)
+    train_dataset, train_loader, val_dataset, val_loader = load_dataset(DEVICE, batch_size)
 
     # Initialize model
     model = SimpleLSTM(INPUT_SIZE, hidden_size, OUTPUT_SIZE, num_layers, dropout=dropout).to(DEVICE)
@@ -184,13 +187,14 @@ def objective(trial):
     best_val_loss = float("inf")
     for epoch in range(1, EPOCHS + 1):
         train_loss = train_model(
-            model=model,
-            train_loader=train_loader,
             criterion=criterion,
-            optimizer=optimizer,
             device=DEVICE,
             epoch=epoch,
-            clip_grad_norm=clip_grad_norm  # Pass it in if your train_loop supports it
+            model=model,
+            train_loader=train_loader,
+            optimizer=optimizer,
+            clip_grad_norm=clip_grad_norm,
+            teacher_forcing_ratio=teacher_forcing_ratio
         )
 
         val_loss = validate_model(
