@@ -3,6 +3,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import torch.nn as nn
 import wandb
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
@@ -111,15 +112,7 @@ def validate_model(criterion, device, epoch, model, val_loader):
     evaluator = ForecastEvaluator(val_truths.flatten(), val_preds.flatten())
     eval_metrics = evaluator.evaluate_all()
     # Log the computed metrics.
-    wandb.log({
-        "R2": eval_metrics["R2"],
-        "NMAE": eval_metrics["NMAE"],
-        "NRMSE": eval_metrics["NRMSE"],
-        "Skill Score": eval_metrics["Skill Score"],
-        "RMSE": eval_metrics["RMSE"],
-        "MAE": eval_metrics["MAE"],
-        "MBE": eval_metrics["MBE"]
-    })
+    wandb.log(eval_metrics)
 
     # Log example prediction
     if epoch % 1 == 0:  # or every epoch, your choice
@@ -151,19 +144,18 @@ def save_checkpoint(epoch, epoch_loss, model, optimizer, val_loss):
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 INPUT_SIZE = 8  # Update if you're using multivariate input
 OUTPUT_SIZE = 2
-EPOCHS = 20  # You can increase for real sweep
+EPOCHS = 20
 PROJECT_NAME = "solar-nowcasting-optuna"
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 # Objective function for Optuna
 def objective(trial):
     # Sample hyperparameters
-    hidden_size = trial.suggest_categorical("hidden_size", [64, 128, 256])
-    num_layers = trial.suggest_int("num_layers", 1, 3)
+    hidden_size = trial.suggest_categorical("hidden_size", [64, 128, 256, 512, 1024])
+    num_layers = trial.suggest_int("num_layers", 1, 5)
     dropout = trial.suggest_float("dropout", 0.1, 0.5)
-    lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
-    batch_size = trial.suggest_categorical("batch_size", [32, 64, 128])
+    lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
+    batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
     clip_grad_norm = trial.suggest_float("clip_grad_norm", 0.5, 5.0)
 
     # Initialize Weights & Biases
@@ -182,7 +174,7 @@ def objective(trial):
     )
 
     # Load data
-    train_dataset, val_dataset, train_loader, val_loader = load_dataset(device, batch_size)
+    train_dataset, val_dataset, train_loader, val_loader = load_dataset(DEVICE, batch_size)
 
     # Initialize model
     model = SimpleLSTM(INPUT_SIZE, hidden_size, OUTPUT_SIZE, num_layers, dropout=dropout).to(DEVICE)

@@ -75,17 +75,27 @@ class ForecastEvaluator:
         """
         return np.mean(y_pred - y_true)
 
+    @staticmethod
+    def compute_mape(y_true, y_pred):
+        """
+        Compute the mean absolute percentage error (MAPE).
+        """
+        valid_indices = y_true != 0
+        return np.mean(np.abs((y_true[valid_indices] - y_pred[valid_indices]) / y_true[valid_indices])) * 100
+
+
     def evaluate_all(self):
         """
         Compute and return all evaluation metrics as a dictionary.
         """
         metrics = {
+            'RMSE': self.compute_rmse(self.y_true, self.y_pred),
+            'MAE': self.compute_mae(self.y_true, self.y_pred),
+            'MAPE': self.compute_mape(self.y_true, self.y_pred),
             'R2': self.compute_r2(self.y_true, self.y_pred),
             'NMAE': self.compute_nmae(self.y_true, self.y_pred),
             'NRMSE': self.compute_nrmse(self.y_true, self.y_pred),
             'Skill Score': self.compute_skill_score(self.y_true, self.y_pred),
-            'RMSE': self.compute_rmse(self.y_true, self.y_pred),
-            'MAE': self.compute_mae(self.y_true, self.y_pred),
             'MBE': self.compute_mbe(self.y_true, self.y_pred),
         }
         return metrics

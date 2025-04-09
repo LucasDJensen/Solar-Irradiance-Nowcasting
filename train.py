@@ -9,7 +9,7 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
 from ForecastEvaluator import ForecastEvaluator  # Utility class for evaluation metrics
-from _config import GAP_THRESHOLD, PATH_CHECKPOINT
+from _config import PATH_CHECKPOINT
 from models import SimpleLSTM
 
 
@@ -62,7 +62,7 @@ def load_checkpoint(device, model, optimizer):
     return start_epoch
 
 
-def train_model(criterion, device, epoch, model, optimizer, train_dataset, train_loader):
+def train_model(criterion, device, epoch, model, optimizer, train_loader, clip_grad_norm):
     model.train()
     epoch_loss = 0.0
     with tqdm(train_loader, unit="batch") as tepoch:
@@ -75,13 +75,13 @@ def train_model(criterion, device, epoch, model, optimizer, train_dataset, train
             loss = criterion(predictions, batch_y)
             loss.backward()
 
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_grad_norm)
 
             optimizer.step()
 
             epoch_loss += loss.item() * batch_X.size(0)
             tepoch.set_postfix(loss=loss.item())
-    epoch_loss /= len(train_loader.dataset)
+    epoch_loss /= len(train_loader)
     wandb.log({"epoch": epoch, "train_loss": epoch_loss, "lr": optimizer.param_groups[0]["lr"]})
     return epoch_loss
 
@@ -100,9 +100,9 @@ def validate_model(criterion, device, epoch, model, val_loader):
             val_loss += loss.item() * batch_X.size(0)
 
             # Accumulate predictions and ground truths.
-            all_val_preds.append(predictions.detach().cpu().float().numpy())
-            all_val_truths.append(batch_y.detach().cpu().float().numpy())
-    val_loss /= len(val_loader.dataset)
+            all_val_preds.append(predictions.cpu().numpy())
+            all_val_truths.append(batch_y.cpu().numpy())
+    val_loss /= len(val_loader)
     wandb.log({"epoch": epoch, "val_loss": val_loss})
     # Concatenate all predictions and truths.
     val_preds = np.concatenate(all_val_preds, axis=0)
@@ -148,6 +148,12 @@ def save_checkpoint(epoch, epoch_loss, model, optimizer, val_loss):
 
 
 def main():
+    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    INPUT_SIZE = 8  # Update if you're using multivariate input
+    OUTPUT_SIZE = 2
+    EPOCHS = 200
+    PROJECT_NAME = "solar-irradiance-nowcasting"
+
     TARGETS = ['DNI', 'DHI']
     INPUT_SEQ_LEN = 60  # Past 60 minutes as input
 
@@ -160,20 +166,18 @@ def main():
     RESUME = False
 
     LEARNING_RATE = 1e-3
-    NUM_EPOCHS = 200
     DROPOUT = 0.5
+    clip_grad_norm = 1
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    train_dataset, train_loader, val_dataset, val_loader = load_dataset(device, BATCH_SIZE)
+    train_dataset, train_loader, val_dataset, val_loader = load_dataset(DEVICE, BATCH_SIZE)
 
     input_size = train_dataset.X.shape[2]  # number of features per time step
-    model = SimpleLSTM(input_size, HIDDEN_SIZE, OUTPUT_SIZE, NUM_LSTM_LAYERS, dropout=DROPOUT).to(device)
+    model = SimpleLSTM(input_size, HIDDEN_SIZE, OUTPUT_SIZE, NUM_LSTM_LAYERS, dropout=DROPOUT).to(DEVICE)
 
     criterion = nn.SmoothL1Loss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
-    wandb.init(project="solar-irradiance-nowcasting", entity="s210025-dtu",
+    wandb.init(project=PROJECT_NAME, entity="s210025-dtu",
                config={"Dataset": "DTU Solar Station",
                        "Model": "SimpleLSTM",
                        "Input Sequence Length": INPUT_SEQ_LEN,
@@ -181,7 +185,6 @@ def main():
                        "LSTM Layers": NUM_LSTM_LAYERS,
                        "Batch Size": BATCH_SIZE,
                        "Learning Rate": LEARNING_RATE,
-                       "Gap Threshold": GAP_THRESHOLD,
                        "Targets": TARGETS,
                        "Output Size": OUTPUT_SIZE,
                        "Loss": criterion,
@@ -194,16 +197,32 @@ def main():
     start_epoch = 1
 
     if RESUME:
-        start_epoch = load_checkpoint(device, model, optimizer)
+        start_epoch = load_checkpoint(DEVICE, model, optimizer)
 
-    for epoch in range(start_epoch, NUM_EPOCHS + 1):
-        epoch_loss = train_model(criterion, device, epoch, model, optimizer, train_dataset, train_loader)
-        val_loss = validate_model(criterion, device, epoch, model, val_dataset, val_loader)
+    for epoch in range(start_epoch, EPOCHS + 1):
 
-        print(f"Epoch {epoch}/{NUM_EPOCHS}, Train Loss: {epoch_loss:.6f}, Val Loss: {val_loss:.6f}")
+        train_loss = train_model(
+            model=model,
+            train_loader=train_loader,
+            criterion=criterion,
+            optimizer=optimizer,
+            device=DEVICE,
+            epoch=epoch,
+            clip_grad_norm=clip_grad_norm  # Pass it in if your train_loop supports it
+        )
+        val_loss = validate_model(
+            criterion=criterion,
+            device=DEVICE,
+            epoch=epoch,
+            model=model,
+            val_loader=val_loader
+        )
+        wandb.log({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
+
+        print(f"Epoch {epoch}/{EPOCHS}, Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}")
 
         if epoch % 10 == 0:
-            save_checkpoint(epoch, epoch_loss, model, optimizer, val_loss)
+            save_checkpoint(epoch, train_loss, model, optimizer, val_loss)
 
     wandb.finish()
 
