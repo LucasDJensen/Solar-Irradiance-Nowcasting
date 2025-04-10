@@ -4,9 +4,9 @@ PROJECT_ROOT = Path(r'/home/s210025/Solar-Irradiance-Nowcasting')
 PATH_OUTPUT = PROJECT_ROOT / 'output'
 PATH_CHECKPOINT = PROJECT_ROOT / 'checkpoint'
 FILE_SCALARS = PATH_OUTPUT / 'scalers.pkl'
-DATA_ROOT = Path(r'/dtu-compute/s210025')
-PATH_RAW_DATA = DATA_ROOT / 'data' / 'raw'
-PATH_PROCESSED_DATA = DATA_ROOT / 'data' / 'processed'
+DATA_ROOT = Path(r'/dtu-compute/s210025/data')
+PATH_RAW_DATA = DATA_ROOT / 'raw'
+PATH_PROCESSED_DATA = DATA_ROOT / 'processed'
 
 PATH_RAW_DTU_SOLAR_STATION = PATH_RAW_DATA / 'dtu_solar_station'
 PKL_PROCESSED_STEP1_DTU_SOLAR_STATION = PATH_PROCESSED_DATA / 'dtu_solar_station' / "preprocessed_data_step1.pkl"

@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 import optuna
 from ForecastEvaluator import ForecastEvaluator  # Utility class for evaluation metrics
-from _config import PATH_CHECKPOINT
+from _config import PATH_CHECKPOINT, DATA_ROOT
 from models import *
 
 
@@ -27,14 +27,14 @@ class TimeSeriesDataset(Dataset):
 
 
 def load_dataset(device, batch_size):
-    train_data = np.load('data/train.npz')
+    train_data = np.load(DATA_ROOT / 'train.npz')
     X_train, y_train = train_data['X'], train_data['y']
     print(f'X shape: {X_train.shape}, y shape: {y_train.shape}')
     train_dataset = TimeSeriesDataset(X_train, y_train, device=device)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     del train_data, X_train, y_train  # Free up memory
     # Load the validation data
-    val_data = np.load('data/val.npz')
+    val_data = np.load(DATA_ROOT / 'val.npz')
     X_val, y_val = val_data['X'], val_data['y']
     print(f'X_val shape: {X_val.shape}, y_val shape: {y_val.shape}')
     val_dataset = TimeSeriesDataset(X_val, y_val, device=device)
