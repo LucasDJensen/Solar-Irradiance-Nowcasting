@@ -1,6 +1,6 @@
 from pathlib import Path
 
-PROJECT_ROOT = Path(r'D:\Jetbrains\Python\Projects\solar_irradiance_nowcasting')
+PROJECT_ROOT = Path(r'/home/s210025/Solar-Irradiance-Nowcasting')
 PATH_OUTPUT = PROJECT_ROOT / 'output'
 PATH_CHECKPOINT = PROJECT_ROOT / 'checkpoint'
 FILE_SCALARS = PATH_OUTPUT / 'scalers.pkl'
