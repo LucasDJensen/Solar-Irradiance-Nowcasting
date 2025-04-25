@@ -63,7 +63,7 @@ def load_checkpoint(device, model, optimizer):
     return start_epoch
 
 
-def train_model(criterion, device, epoch, model, optimizer, train_loader, clip_grad_norm, teacher_forcing_ratio):
+def train_model(criterion, device, epoch, model, optimizer, train_loader, clip_grad_norm):
     model.train()
     epoch_loss = 0.0
     with tqdm(train_loader, unit="batch") as tepoch:
@@ -72,7 +72,6 @@ def train_model(criterion, device, epoch, model, optimizer, train_loader, clip_g
             batch_X, batch_y = batch_X.to(device), batch_y.to(device)
 
             optimizer.zero_grad()
-            # predictions = model(batch_X, batch_y, teacher_forcing_ratio)
             predictions = model(batch_X)
             loss = criterion(predictions, batch_y)
             loss.backward()
@@ -193,8 +192,7 @@ def objective(trial):
             model=model,
             train_loader=train_loader,
             optimizer=optimizer,
-            clip_grad_norm=clip_grad_norm,
-            teacher_forcing_ratio=teacher_forcing_ratio
+            clip_grad_norm=clip_grad_norm
         )
 
         val_loss = validate_model(

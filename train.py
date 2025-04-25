@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from ForecastEvaluator import ForecastEvaluator  # Utility class for evaluation metrics
 from _config import PATH_CHECKPOINT, DATA_ROOT
-from models import SimpleLSTM
+from models import *
 
 
 class TimeSeriesDataset(Dataset):
@@ -81,7 +81,7 @@ def train_model(criterion, device, epoch, model, optimizer, train_loader, clip_g
 
             epoch_loss += loss.item() * batch_X.size(0)
             tepoch.set_postfix(loss=loss.item())
-    epoch_loss /= len(train_loader)
+    epoch_loss /= len(train_loader.dataset)
     wandb.log({"epoch": epoch, "train_loss": epoch_loss, "lr": optimizer.param_groups[0]["lr"]})
     return epoch_loss
 
@@ -102,7 +102,7 @@ def validate_model(criterion, device, epoch, model, val_loader):
             # Accumulate predictions and ground truths.
             all_val_preds.append(predictions.cpu().numpy())
             all_val_truths.append(batch_y.cpu().numpy())
-    val_loss /= len(val_loader)
+    val_loss /= len(val_loader.dataset)
     wandb.log({"epoch": epoch, "val_loss": val_loss})
     # Concatenate all predictions and truths.
     val_preds = np.concatenate(all_val_preds, axis=0)
@@ -111,15 +111,7 @@ def validate_model(criterion, device, epoch, model, val_loader):
     evaluator = ForecastEvaluator(val_truths.flatten(), val_preds.flatten())
     eval_metrics = evaluator.evaluate_all()
     # Log the computed metrics.
-    wandb.log({
-        "R2": eval_metrics["R2"],
-        "NMAE": eval_metrics["NMAE"],
-        "NRMSE": eval_metrics["NRMSE"],
-        "Skill Score": eval_metrics["Skill Score"],
-        "RMSE": eval_metrics["RMSE"],
-        "MAE": eval_metrics["MAE"],
-        "MBE": eval_metrics["MBE"]
-    })
+    wandb.log(eval_metrics)
 
     # Log example prediction
     if epoch % 1 == 0:  # or every epoch, your choice
@@ -157,17 +149,17 @@ def main():
     TARGETS = ['DNI', 'DHI']
     INPUT_SEQ_LEN = 60  # Past 60 minutes as input
 
-    NUM_LSTM_LAYERS = 1
-    HIDDEN_SIZE = 128
+    NUM_LSTM_LAYERS = 2
+    HIDDEN_SIZE = 64
     OUTPUT_SIZE = len(TARGETS)  # predicting two features (DNI, DHI)
 
-    BATCH_SIZE = 128
+    BATCH_SIZE = 64
 
     RESUME = False
 
-    LEARNING_RATE = 1e-3
-    DROPOUT = 0.5
-    clip_grad_norm = 1
+    LEARNING_RATE = 3e-4
+    DROPOUT = 0.42
+    clip_grad_norm = 0.86
 
     train_dataset, train_loader, val_dataset, val_loader = load_dataset(DEVICE, BATCH_SIZE)
 
