@@ -1,0 +1,29 @@
+{
+  "name": "LSTM-DNI-only",
+  "description": "Only lagged features of DNI as input.",
+  "target_variables": [
+    {
+      "name": "DNI"
+    }
+  ],
+  "features": [
+    {
+      "name": "DNI",
+      "include_self": false,
+      "lag": [
+        {
+          "name": "DNI_lag_60",
+          "value": 60
+        },
+        {
+          "name": "DNI_lag_1440",
+          "value": 1440
+        },
+        {
+          "name": "DNI_lag_2880",
+          "value": 2880
+        }
+      ]
+    }
+  ]
+}
