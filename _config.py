@@ -1,11 +1,11 @@
 import os
 from pathlib import Path
 
-PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", r'D:\Jetbrains\Python\Projects\solar_irradiance_nowcasting'))
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", r'C:\Users\lucas\PycharmProjects\Solar-Irradiance-Nowcasting'))
 PATH_OUTPUT = PROJECT_ROOT / 'output'
 PATH_CHECKPOINT = PROJECT_ROOT / 'checkpoint'
 FILE_SCALARS = PATH_OUTPUT / 'scalers.pkl'
-DATA_ROOT = Path(os.getenv("DATA_ROOT", r'D:\Jetbrains\Python\Projects\solar_irradiance_nowcasting\data'))
+DATA_ROOT = Path(os.getenv("DATA_ROOT", r'C:\Users\lucas\PycharmProjects\Solar-Irradiance-Nowcasting\data'))
 PATH_RAW_DATA = DATA_ROOT / 'raw'
 PATH_PROCESSED_DATA = DATA_ROOT / 'processed'
 
