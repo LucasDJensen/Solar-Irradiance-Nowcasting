@@ -19,7 +19,7 @@ class MyDataLoader:
             for lag in feature.lag:
                 self.df[lag.name] = self.df[feature.name].shift(lag.value)
 
-    def clean_df(self, drop_solar_altitude_below_0: bool = True, drop_nan: bool = True):
+    def prepare_df(self, drop_solar_altitude_below_0: bool = True, drop_nan: bool = True):
         if drop_solar_altitude_below_0:
             # drop entire row if solar altitude is below 0
             mask = self.df['solar_altitude'] < 0
@@ -29,7 +29,7 @@ class MyDataLoader:
             # Drop rows with any NaN values in any column
             self.df = self.df.dropna()
 
-    def get_df_from_config(self):
+    def get_df(self):
         df = self.df[self.config.get_df_names_from_config()].copy()
         return df
 
@@ -41,5 +41,5 @@ if __name__ == '__main__':
     print(data_loader.df.info())
     data_loader.lag_features()
     print(data_loader.df.info())
-    data_loader.clean_df()
+    data_loader.prepare_df()
     print(data_loader.df.info())

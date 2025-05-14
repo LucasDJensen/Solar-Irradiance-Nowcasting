@@ -86,8 +86,8 @@ def load_dataset(my_config, targets, device, batch_size):
     data_loader = MyDataLoader(my_config)
     data_loader.load_data()
     data_loader.lag_features()
-    data_loader.clean_df()
-    df = data_loader.get_df_from_config()
+    data_loader.prepare_df()
+    df = data_loader.get_df()
 
     X = df.drop(columns=targets)
     y = df[targets]
