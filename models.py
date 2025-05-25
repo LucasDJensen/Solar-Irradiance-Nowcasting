@@ -30,5 +30,6 @@ class SimpleLSTM(nn.Module):
             Tensor: Output predictions for each time step with shape (batch_size, seq_len, output_size)
         """
         lstm_out, _ = self.lstm(x)  # lstm_out shape: (batch_size, seq_len, hidden_size)
+        lstm_out = torch.relu(lstm_out)
         output = self.fc(lstm_out)  # output shape: (batch_size, seq_len, output_size)
         return output

@@ -1,6 +1,9 @@
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from typing import List, Optional
+
+import pandas as pd
 
 
 @dataclass
@@ -36,6 +39,32 @@ class FeatureVariable:
             data['lag'] = [Lag.from_dict(l) for l in data['lag']]
         return FeatureVariable(**data)
 
+@dataclass
+class Period:
+    start: datetime
+    end: datetime
+
+    @staticmethod
+    def from_dict(data: dict) -> 'Period':
+        return Period(
+            start=pd.to_datetime(datetime.strptime(data['start'], "%Y-%m-%dT%H:%M:%SZ")),
+            end=pd.to_datetime(datetime.strptime(data['end'], "%Y-%m-%dT%H:%M:%SZ")),
+        )
+
+@dataclass
+class TrainValTestSplit:
+    train: Period
+    test: Period
+    val: Period
+
+    @staticmethod
+    def from_dict(data: dict) -> 'TrainValTestSplit':
+        return TrainValTestSplit(
+            train=Period.from_dict(data['train']),
+            test=Period.from_dict(data['test']),
+            val=Period.from_dict(data['val'])
+        )
+
 
 @dataclass
 class MyConfig:
@@ -43,6 +72,11 @@ class MyConfig:
     description: str
     target_variables: List[TargetVariable]
     features: List[FeatureVariable]
+    train_val_test_split: TrainValTestSplit
+
+    def __post_init__(self):
+        self.TARGETS = [x.name for x in self.target_variables]
+        self.FEATURES = self.get_df_names_from_config(include_targets=False)
 
     @staticmethod
     def from_dict(data: dict) -> 'MyConfig':
@@ -52,6 +86,7 @@ class MyConfig:
         data['features'] = [
             FeatureVariable.from_dict(f) for f in data.get('features', [])
         ]
+        data['train_val_test_split'] = TrainValTestSplit.from_dict(data['train_val_test_split'])
         return MyConfig(**data)
 
     def get_df_names_from_config(self, include_targets=True) -> List[str]:
@@ -95,9 +130,10 @@ def load_config(path: str) -> MyConfig:
 
 if __name__ == '__main__':
     # adjust this path as needed
-    config = load_config(r'D:\Jetbrains\Python\Projects\solar_irradiance_nowcasting\configs\dni_only\config.json')
+    config = load_config(r'D:\Jetbrains\Python\Projects\solar_irradiance_nowcasting\configs\dni_only\dni_and_station.json')
     print(config)
     print(config.target_variables)
     print(config.features)
     print(config.features[0].lag)
     print(config.get_df_names_from_config())
+    print(config.train_val_test_split)

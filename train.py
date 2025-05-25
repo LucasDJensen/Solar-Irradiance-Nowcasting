@@ -1,4 +1,6 @@
+import datetime
 import os
+import shutil
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,31 +10,37 @@ from tqdm import tqdm
 
 from ForecastEvaluator import ForecastEvaluator  # Utility class for evaluation metrics
 from _config import PATH_CHECKPOINT, PATH_TO_CONFIG
-from data_loader import MyDataLoader
+from data_loader import MyDataLoader, SPLIT
 from models import *
 from my_config import load_config, MyConfig
+
+time_str = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+PATH_CHECKPOINT = PATH_CHECKPOINT / time_str
+PATH_CHECKPOINT.mkdir(parents=True, exist_ok=True)
+
+shutil.copy(PATH_TO_CONFIG, PATH_CHECKPOINT / 'config.json')  # copy config file to checkpoint directory
 
 my_config: MyConfig = load_config(PATH_TO_CONFIG)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 EPOCHS = 200
 
-TARGETS = [x.name for x in my_config.target_variables]
-FEATURES = my_config.get_df_names_from_config(include_targets=False)
+TARGETS = my_config.TARGETS
+FEATURES = my_config.FEATURES
 INPUT_SEQ_LEN = 60  # Past 60 minutes as input
 
 NUM_LSTM_LAYERS = 2
 HIDDEN_SIZE = 64
-OUTPUT_SIZE = len(TARGETS)  # predicting two features (DNI, DHI)
-INPUT_SIZE = len(FEATURES)  # number of features per time step
+OUTPUT_SIZE = len(TARGETS)
+INPUT_SIZE = len(FEATURES)
 
-BATCH_SIZE = 64
+BATCH_SIZE = 128
 
-RESUME = False
-
-LEARNING_RATE = 3e-4
+LEARNING_RATE = 1e-3
 DROPOUT = 0.42
 CLIP_GRAD_NORM = 0.86
+
+RESUME = False
 
 model = SimpleLSTM(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, NUM_LSTM_LAYERS, dropout=DROPOUT).to(DEVICE)
 
@@ -49,67 +57,19 @@ class TimeSeriesDataset(Dataset):
         return self.X[idx], self.y[idx]
 
 
-def create_sequences(X, y, timestamps, input_seq_len, rolling=True):
-    X_tmp, y_tmp = [], []
-    ts_tmp = []
-    total_length = len(y)
-    # Define the threshold as a timedelta (here, in minutes)
-    gap_threshold_timedelta = np.timedelta64(1, 'm')
-
-    # Slide over the data
-    i = 0
-    while i < total_length - input_seq_len:
-        # Get timestamps for the entire sequence (input and forecast)
-        seq_timestamps = timestamps[i: i + input_seq_len]
-        # Calculate differences between consecutive timestamps
-        time_diffs = np.diff(seq_timestamps)
-        # If any gap is larger than the allowed threshold, skip this sequence
-        if np.any(time_diffs > gap_threshold_timedelta):
-            if rolling:
-                i += 1
-            else:
-                i += input_seq_len  # Skip to the end of the current sequence
-            continue
-        # Otherwise, create the sequence as before
-        X_tmp.append(X[i: i + input_seq_len])
-        y_tmp.append(y[i: i + input_seq_len])
-        ts_tmp.append(seq_timestamps)
-        if rolling:
-            i += 1
-        else:
-            i += input_seq_len  # Skip to the end of the current sequence
-    X, y, ts = np.array(X_tmp), np.array(y_tmp), np.array(ts_tmp)
-    return X, y, ts
-
-
-def load_dataset(my_config, targets, device, batch_size):
+def load_dataset(my_config, device, batch_size):
     data_loader = MyDataLoader(my_config)
     data_loader.load_data()
+    data_loader.reindex_full_range()
     data_loader.lag_features()
-    data_loader.prepare_df()
-    df = data_loader.get_df()
+    data_loader.prepare_df(drop_solar_altitude_below_0=True, drop_nan=True)
 
-    X = df.drop(columns=targets)
-    y = df[targets]
-
-    # Training data
-    X_train = X.loc['2022']
-    y_train = y.loc['2022']
-
-    print(f'Before creating sequences: X_train shape: {X_train.shape}, y_train shape: {y_train.shape}')
-    X_train, y_train = create_sequences(X_train.to_numpy(), y_train.to_numpy(), df.index.to_numpy(), 60, rolling=True)
-    print(f'After creating sequences: X_train shape: {X_train.shape}, y_train shape: {y_train.shape}')
-    train_dataset = TimeSeriesDataset(X_train, y_train, device=device)
+    X, y, ts = data_loader.get_X_y(SPLIT.TRAIN, input_seq_len=60, rolling=True, verbose=True)
+    train_dataset = TimeSeriesDataset(X, y, device=device)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-    # Validation data
-    X_val = X.loc['2023']
-    y_val = y.loc['2023']
-
-    print(f'Before creating sequences: X_val shape: {X_val.shape}, y_val shape: {y_val.shape}')
-    X_val, y_val = create_sequences(X_val.to_numpy(), y_val.to_numpy(), df.index.to_numpy(), 60, rolling=True)
-    print(f'After creating sequences: X_val shape: {X_val.shape}, y_val shape: {y_val.shape}')
-    val_dataset = TimeSeriesDataset(X_val, y_val, device=device)
+    X, y, ts = data_loader.get_X_y(SPLIT.VAL, input_seq_len=60, rolling=True, verbose=True)
+    val_dataset = TimeSeriesDataset(X, y, device=device)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     return train_dataset, train_loader, val_dataset, val_loader
@@ -213,7 +173,6 @@ def save_checkpoint(epoch, epoch_loss, model, optimizer, val_loss):
 
 
 def main():
-
     criterion = nn.SmoothL1Loss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
@@ -239,8 +198,7 @@ def main():
     if RESUME:
         start_epoch = load_checkpoint(DEVICE, model, optimizer)
 
-
-    train_dataset, train_loader, val_dataset, val_loader = load_dataset(my_config, TARGETS, DEVICE, BATCH_SIZE)
+    train_dataset, train_loader, val_dataset, val_loader = load_dataset(my_config, DEVICE, BATCH_SIZE)
 
     for epoch in range(start_epoch, EPOCHS + 1):
 
