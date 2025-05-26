@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from _config import PKL_PROCESSED_STEP1_DTU_SOLAR_STATION, PATH_TO_CONFIG
-from _utils import create_sequences
+from _utils import create_sequences, scale_dataframe
 from my_config import load_config, MyConfig
 
 class SPLIT(Enum):
@@ -82,6 +82,12 @@ class MyDataLoader:
 
     def get_target_names(self) -> list[str]:
         return self.config.TARGETS
+
+    def scale(self, method: str = 'minmax') -> None:
+        if self.df is None:
+            raise ValueError("DataFrame is not loaded. Please call load_data() first.")
+
+        self.df = scale_dataframe(self.df, method=method, columns=self.get_feature_names())
 
 
 if __name__ == '__main__':
