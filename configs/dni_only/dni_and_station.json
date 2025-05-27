@@ -91,13 +91,8 @@
     },
     {
       "name": "solar_altitude",
-      "include_self": false,
-      "lag": [
-        {
-          "name": "solar_altitude_lag_60",
-          "value": 60
-        }
-      ]
+      "include_self": true,
+      "lag": []
     },
     {
       "name": "wind_dir_avg",
