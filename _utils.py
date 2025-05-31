@@ -43,6 +43,7 @@ from sklearn.preprocessing import (
 )
 
 def scale_dataframe(
+    filename:str,
     df: pd.DataFrame,
     method: str = 'standard',
     columns: list[str] | None = None,
@@ -116,10 +117,10 @@ def scale_dataframe(
     result[cols_to_scale] = scaled_df
 
     # save scaler to file
-    scaler_filename = f"{method}_scaler.pkl"
-    with open(scaler_filename, 'wb') as f:
-        import pickle
-        pickle.dump(scaler, f)
-    print(f"Scaler saved to {scaler_filename}")
+    if filename:
+        with open(filename, 'wb') as f:
+            import pickle
+            pickle.dump(scaler, f)
+        print(f"Scaler saved to {filename}")
 
     return result

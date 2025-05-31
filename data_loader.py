@@ -83,11 +83,11 @@ class MyDataLoader:
     def get_target_names(self) -> list[str]:
         return self.config.TARGETS
 
-    def scale(self, method: str = 'minmax') -> None:
+    def scale(self, filename:str, method: str = 'minmax') -> None:
         if self.df is None:
             raise ValueError("DataFrame is not loaded. Please call load_data() first.")
 
-        self.df = scale_dataframe(self.df, method=method, columns=self.get_feature_names())
+        self.df = scale_dataframe(filename, self.df, method=method, columns=self.get_feature_names())
 
 
 if __name__ == '__main__':
