@@ -1,7 +1,6 @@
 import torch
 from torch import nn
 
-
 # Define the simple LSTM model from earlier
 class SimpleLSTM(nn.Module):
     def __init__(self, input_size: int, hidden_size: int, output_size: int, num_layers: int, dropout: float = 0.5):

@@ -10,6 +10,7 @@ from tqdm import tqdm
 
 from ForecastEvaluator import ForecastEvaluator  # Utility class for evaluation metrics
 from _config import PATH_CHECKPOINT, PATH_TO_CONFIG
+from _utils import load_scaler_and_transform_df, scale_dataframe
 from data_loader import MyDataLoader, SPLIT
 from models import *
 from my_config import load_config, MyConfig
@@ -25,18 +26,17 @@ EPOCHS = 100
 TARGETS = my_config.TARGETS
 FEATURES = my_config.FEATURES
 INPUT_SEQ_LEN = 60  # Past x minutes as input
-OUTPUT_SEQ_LEN = 60  # Predict next y minutes
 
-NUM_LSTM_LAYERS = 2
-HIDDEN_SIZE = 64
+NUM_LSTM_LAYERS = 3
+HIDDEN_SIZE = 32
 OUTPUT_SIZE = len(TARGETS)
 INPUT_SIZE = len(FEATURES)
 
-BATCH_SIZE = 128
+BATCH_SIZE = 512
 
-LEARNING_RATE = 3e-4
-DROPOUT = 0.42
-CLIP_GRAD_NORM = 0.86
+LEARNING_RATE = 1e-3
+DROPOUT = 0.15
+CLIP_GRAD_NORM = 0.835
 
 RESUME = False
 
@@ -61,36 +61,20 @@ def load_dataset(my_config, device, batch_size):
     data_loader.reindex_full_range()
     data_loader.lag_features()
     data_loader.prepare_df(drop_solar_altitude_below_0=True, drop_nan=True)
+    method = 'minmax'  # or 'standard', 'maxabs', 'robust', 'normalizer'
+    scalar_file = PATH_CHECKPOINT / f'{method}.pkl'
 
-    X, y, ts = data_loader.get_X_y(SPLIT.TRAIN, input_seq_len=INPUT_SEQ_LEN, rolling=True, verbose=True)
-    train_dataset = TimeSeriesDataset(X, y, device=device)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    df_train = scale_dataframe(scalar_file, data_loader.get_split(SPLIT.TRAIN), method=method, columns=data_loader.get_feature_names() + data_loader.get_target_names())
+    X_train, y_train, _ = data_loader.get_X_y(df_train, input_seq_len=INPUT_SEQ_LEN, rolling=True, verbose=True)
+    train_dataset = TimeSeriesDataset(X_train, y_train, device=device)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
 
-    X, y, ts = data_loader.get_X_y(SPLIT.VAL, input_seq_len=OUTPUT_SEQ_LEN, rolling=True, verbose=True)
-    val_dataset = TimeSeriesDataset(X, y, device=device)
+    df_val = load_scaler_and_transform_df(scalar_file, data_loader.get_split(SPLIT.VAL))
+    X_val, y_val, ts = data_loader.get_X_y(df_val, input_seq_len=INPUT_SEQ_LEN, rolling=True, verbose=True)
+    val_dataset = TimeSeriesDataset(X_val, y_val, device=device)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     return train_dataset, train_loader, val_dataset, val_loader
-
-
-def load_checkpoint(device, model, optimizer):
-    # Find all checkpoint files in the directory following the pattern checkpoint_{epoch}.pt
-    checkpoint_files = [f for f in os.listdir(PATH_CHECKPOINT) if f.startswith('checkpoint_') and f.endswith('.pt')]
-    if checkpoint_files:
-        # Sort files by epoch number in descending order and choose the latest checkpoint.
-        checkpoint_files.sort(key=lambda x: int(x.split('_')[1].split('.')[0]), reverse=True)
-        latest_checkpoint_file = checkpoint_files[0]
-
-        checkpoint = torch.load(PATH_CHECKPOINT / latest_checkpoint_file, map_location=device)
-        model.load_state_dict(checkpoint['model_state_dict'])
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        start_epoch = checkpoint['epoch'] + 1
-
-        print(f"Resuming training from epoch {start_epoch} using checkpoint {latest_checkpoint_file}")
-    else:
-        print("No checkpoint found. Starting training from scratch.")
-        start_epoch = 1
-    return start_epoch
 
 
 def train_model(criterion, device, epoch, model, optimizer, train_loader, clip_grad_norm):
@@ -184,9 +168,9 @@ def main():
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
         mode='min',
-        factor=0.2,
-        patience=2,
-        min_lr=1e-5,
+        factor=0.5,
+        patience=1,
+        min_lr=1e-6,
     )
 
     best_val = float('inf')
@@ -197,7 +181,6 @@ def main():
                config={"Dataset": "DTU Solar Station",
                        "Model": "SimpleLSTM",
                        "Input Sequence Length": INPUT_SEQ_LEN,
-                       "Prediction Sequence Length": OUTPUT_SEQ_LEN,
                        "Hidden Size": HIDDEN_SIZE,
                        "LSTM Layers": NUM_LSTM_LAYERS,
                        "Batch Size": BATCH_SIZE,
@@ -213,9 +196,6 @@ def main():
     wandb.watch(model, log="all")
 
     start_epoch = 1
-
-    if RESUME:
-        start_epoch = load_checkpoint(DEVICE, model, optimizer)
 
     train_dataset, train_loader, val_dataset, val_loader = load_dataset(my_config, DEVICE, BATCH_SIZE)
 

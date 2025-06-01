@@ -1,4 +1,6 @@
 import datetime
+import os
+import shutil
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,7 +10,8 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
 from ForecastEvaluator import ForecastEvaluator  # Utility class for evaluation metrics
-from _config import PATH_TO_CONFIG
+from _config import PATH_CHECKPOINT, PATH_TO_CONFIG
+from _utils import load_scaler_and_transform_df, scale_dataframe
 from data_loader import MyDataLoader, SPLIT
 from models import *
 from my_config import load_config, MyConfig
@@ -23,7 +26,6 @@ EPOCHS = 100
 TARGETS = my_config.TARGETS
 FEATURES = my_config.FEATURES
 INPUT_SEQ_LEN = 60  # Past x minutes as input
-OUTPUT_SEQ_LEN = 60  # Predict next y minutes
 
 OUTPUT_SIZE = len(TARGETS)
 INPUT_SIZE = len(FEATURES)
@@ -47,13 +49,17 @@ def load_dataset(my_config, device, batch_size):
     data_loader.reindex_full_range()
     data_loader.lag_features()
     data_loader.prepare_df(drop_solar_altitude_below_0=True, drop_nan=True)
+    method = 'minmax'  # or 'standard', 'maxabs', 'robust', 'normalizer'
+    scalar_file = PATH_CHECKPOINT / f'{method}.pkl'
 
-    X, y, ts = data_loader.get_X_y(SPLIT.TRAIN, input_seq_len=INPUT_SEQ_LEN, rolling=True, verbose=True)
-    train_dataset = TimeSeriesDataset(X, y, device=device)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    df_train = scale_dataframe(scalar_file, data_loader.get_split(SPLIT.TRAIN), method=method, columns=data_loader.get_feature_names() + data_loader.get_target_names())
+    X_train, y_train, _ = data_loader.get_X_y(df_train, input_seq_len=INPUT_SEQ_LEN, rolling=True, verbose=True)
+    train_dataset = TimeSeriesDataset(X_train, y_train, device=device)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
 
-    X, y, ts = data_loader.get_X_y(SPLIT.VAL, input_seq_len=OUTPUT_SEQ_LEN, rolling=True, verbose=True)
-    val_dataset = TimeSeriesDataset(X, y, device=device)
+    df_val = load_scaler_and_transform_df(scalar_file, data_loader.get_split(SPLIT.VAL))
+    X_val, y_val, ts = data_loader.get_X_y(df_val, input_seq_len=INPUT_SEQ_LEN, rolling=True, verbose=True)
+    val_dataset = TimeSeriesDataset(X_val, y_val, device=device)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     return train_dataset, train_loader, val_dataset, val_loader
@@ -126,11 +132,11 @@ def validate_model(criterion, device, epoch, model, val_loader):
 # Objective function for Optuna
 def objective(trial):
     # Sample hyperparameters
-    hidden_size = trial.suggest_categorical("hidden_size", [64, 128, 256])
+    hidden_size = trial.suggest_categorical("hidden_size", [16, 32, 64, 128, 256])
     num_layers = trial.suggest_int("num_layers", 1, 3)
     dropout = trial.suggest_float("dropout", 0.1, 0.5)
-    lr = trial.suggest_float("lr", 1e-4, 1e-3, log=True)
-    batch_size = trial.suggest_categorical("batch_size", [32, 64])
+    lr = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
+    batch_size = trial.suggest_categorical("batch_size", [16, 32, 64, 128, 256, 512])
     clip_grad_norm = trial.suggest_float("clip_grad_norm", 0.5, 1.0)
 
     # Initialize model
@@ -148,9 +154,9 @@ def objective(trial):
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
         mode='min',
-        factor=0.2,
-        patience=2,
-        min_lr=1e-5,
+        factor=0.5,
+        patience=1,
+        min_lr=1e-6,
     )
     best_val = float('inf')
     no_improve = 0
@@ -160,7 +166,6 @@ def objective(trial):
                config={"Dataset": "DTU Solar Station",
                        "Model": "SimpleLSTM",
                        "Input Sequence Length": INPUT_SEQ_LEN,
-                       "Prediction Sequence Length": OUTPUT_SEQ_LEN,
                        "Hidden Size": hidden_size,
                        "LSTM Layers": num_layers,
                        "Batch Size": batch_size,

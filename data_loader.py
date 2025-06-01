@@ -1,10 +1,11 @@
 from enum import Enum
+import pickle
 
 import numpy as np
 import pandas as pd
 
 from _config import PKL_PROCESSED_STEP1_DTU_SOLAR_STATION, PATH_TO_CONFIG
-from _utils import create_sequences, scale_dataframe
+from _utils import create_sequences, scale_dataframe, load_scaler_and_transform_df, inverse_transform_targets
 from my_config import load_config, MyConfig
 
 class SPLIT(Enum):
@@ -67,13 +68,12 @@ class MyDataLoader:
         else:
             raise ValueError("Invalid split type. Use SPLIT.TRAIN, SPLIT.VAL, or SPLIT.TEST.")
 
-    def get_X_y(self, split: SPLIT, input_seq_len=60, rolling=True, verbose=True) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        df_train = self.get_split(split)
-        X = df_train.drop(columns=self.config.TARGETS)
-        y = df_train[self.config.TARGETS]
+    def get_X_y(self, df:pd.DataFrame, input_seq_len=60, rolling=True, verbose=True) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        X = df.drop(columns=self.config.TARGETS)
+        y = df[self.config.TARGETS]
 
         if verbose: print(f'Before creating sequences: X shape: {X.shape}, y shape: {y.shape}')
-        X, y, ts = create_sequences(X.to_numpy(), y.to_numpy(), df_train.index.to_numpy(), input_seq_len, rolling=rolling)
+        X, y, ts = create_sequences(X.to_numpy(), y.to_numpy(), df.index.to_numpy(), input_seq_len, rolling=rolling)
         if verbose: print(f'After creating sequences: X shape: {X.shape}, y shape: {y.shape}')
         return X, y, ts
 
@@ -83,26 +83,41 @@ class MyDataLoader:
     def get_target_names(self) -> list[str]:
         return self.config.TARGETS
 
-    def scale(self, filename:str, method: str = 'minmax') -> None:
-        if self.df is None:
-            raise ValueError("DataFrame is not loaded. Please call load_data() first.")
-
-        self.df = scale_dataframe(filename, self.df, method=method, columns=self.get_feature_names())
 
 
 if __name__ == '__main__':
     my_config: MyConfig = load_config(PATH_TO_CONFIG)
     data_loader = MyDataLoader(my_config)
     data_loader.load_data()
-    print(data_loader.df.info())
+    # print(data_loader.df.info())
     data_loader.reindex_full_range()
-    print(data_loader.df.info())
+    # print(data_loader.df.info())
     data_loader.lag_features()
-    print(data_loader.df.info())
-    print(data_loader.get_df().info())
+    # print(data_loader.df.info())
+    # print(data_loader.get_df().info())
     data_loader.prepare_df(drop_solar_altitude_below_0=True, drop_nan=True)
-    print(data_loader.df.info())
-    print(data_loader.get_df().info())
-    print(data_loader.get_split(SPLIT.TRAIN).info())
-    print(data_loader.get_split(SPLIT.VAL).info())
-    print(data_loader.get_split(SPLIT.TEST).info())
+    scalar_file = 'minmax.pkl'
+    # print(data_loader.df.info())
+
+    df = data_loader.get_split(SPLIT.TRAIN)
+    print(df.loc['2020-06-12 12:00'].head())
+    df = scale_dataframe(scalar_file, df, method='minmax', columns=data_loader.get_feature_names() + data_loader.get_target_names())
+    print(df.loc['2020-06-12 12:00'].head())
+    df = data_loader.get_split(SPLIT.VAL)
+    print(df.loc['2021-06-12 12:00'].head())
+    df = load_scaler_and_transform_df(scalar_file, df)
+    print(df.loc['2021-06-12 12:00'].head())
+    df = data_loader.get_split(SPLIT.TEST)
+    print(df.loc['2023-06-12 12:00'].head())
+    df = load_scaler_and_transform_df(scalar_file, df)
+    print(df.loc['2023-06-12 12:00'].head())
+    df = inverse_transform_targets(scalar_file, df, data_loader.get_target_names())
+    print(df.loc['2023-06-12 12:00'].head())
+    
+
+
+
+    # print(data_loader.get_df().info())
+    # print(data_loader.get_split(SPLIT.TRAIN).info())
+    # print(data_loader.get_split(SPLIT.VAL).info())
+    # print(data_loader.get_split(SPLIT.TEST).info())
