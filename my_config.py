@@ -73,10 +73,16 @@ class MyConfig:
     target_variables: List[TargetVariable]
     features: List[FeatureVariable]
     train_val_test_split: TrainValTestSplit
-
-    def __post_init__(self):
-        self.TARGETS = [x.name for x in self.target_variables]
-        self.FEATURES = self.get_df_names_from_config(include_targets=False)
+    EPOCHS: int
+    BATCH_SIZE: int
+    INPUT_SEQ_LEN: int
+    GAP_THRESHOLD: int
+    NUM_LSTM_LAYERS: int
+    HIDDEN_SIZE: int
+    LEARNING_RATE: float
+    DROPOUT: float
+    CLIP_GRAD_NORM: float
+    EARLY_STOPPING_PATIENCE: int
 
     @staticmethod
     def from_dict(data: dict) -> 'MyConfig':
@@ -120,6 +126,15 @@ class MyConfig:
         else:
             targets = []
         return targets + names
+    
+    def get_df_target_names(self) -> List[str]:
+        """
+        Extracts the names of target variables defined in the `target_variables` attribute.
+
+        :return: A list of names of target variables.
+        :rtype: List[str]
+        """
+        return [tv.name for tv in self.target_variables]
 
 
 def load_config(path: str) -> MyConfig:
@@ -130,7 +145,7 @@ def load_config(path: str) -> MyConfig:
 
 if __name__ == '__main__':
     # adjust this path as needed
-    config = load_config(r'D:\Jetbrains\Python\Projects\solar_irradiance_nowcasting\configs\dni_only\dni_and_station.json')
+    config = load_config(r'D:\Jetbrains\Python\Projects\solar_irradiance_nowcasting\configs\dni_only\dni_and_station_ecmwf.json')
     print(config)
     print(config.target_variables)
     print(config.features)

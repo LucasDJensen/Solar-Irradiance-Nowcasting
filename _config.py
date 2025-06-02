@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-PATH_TO_CONFIG = Path(os.getenv("CONFIG", r'D:\Jetbrains\Python\Projects\solar_irradiance_nowcasting\configs\dni_only\dni_and_station.json'))
+PATH_TO_CONFIG = Path(os.getenv("CONFIG", r'D:\Jetbrains\Python\Projects\solar_irradiance_nowcasting\configs\dni_only\dni_and_station_ecmwf.json'))
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", r'D:\Jetbrains\Python\Projects\solar_irradiance_nowcasting'))
 PATH_OUTPUT = PROJECT_ROOT / 'output'
@@ -12,7 +12,7 @@ PATH_PROCESSED_DATA = DATA_ROOT / 'processed'
 
 PATH_RAW_DTU_SOLAR_STATION = PATH_RAW_DATA / 'dtu_solar_station'
 PKL_PROCESSED_STEP1_DTU_SOLAR_STATION = PATH_PROCESSED_DATA / 'dtu_solar_station' / "preprocessed_data_step1.pkl"
-PKL_PROCESSED_STEP2_DTU_SOLAR_STATION = PATH_PROCESSED_DATA / 'dtu_solar_station' / "preprocessed_data_step2.pkl"
+PKL_PROCESSED_ECMWF = PATH_PROCESSED_DATA / 'ecmwf' / "forecast_2020_to_2025_minutely_interpolated.pkl"
 GAP_THRESHOLD = 1
 """
 This gap threshold is used to skip sequences where the time difference between consecutive timestamps is larger than this value.

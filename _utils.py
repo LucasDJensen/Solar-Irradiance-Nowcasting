@@ -111,10 +111,12 @@ def scale_dataframe(
         index=df.index,
         columns=cols_to_scale
     )
+    del scaled_vals
 
     # Return a new DataFrame with scaled and untouched columns
     result = df.copy()
     result[cols_to_scale] = scaled_df
+    del scaled_df 
 
     # save scaler to file
     if filename:
