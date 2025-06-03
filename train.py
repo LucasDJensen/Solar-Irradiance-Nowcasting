@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from ForecastEvaluator import ForecastEvaluator  # Utility class for evaluation metrics
-from TimeSeriesDataset import TimeSeriesDataset
+from TimeSeriesDataset import TimeSeriesDatasetGPU
 from _config import PATH_CHECKPOINT
 potential_config = Path('./config.json')
 if potential_config.exists():
@@ -23,7 +23,7 @@ from data_loader import MyDataLoader, SPLIT
 from models import *
 from my_config import load_config, MyConfig
 
-def load_dataset(my_config: MyConfig, path_checkpoint):
+def load_dataset(my_config: MyConfig, path_checkpoint, device: torch.device):
     data_loader = MyDataLoader(my_config)
     data_loader.load_data()
     data_loader.load_ecmwf_data()
@@ -45,48 +45,52 @@ def load_dataset(my_config: MyConfig, path_checkpoint):
     y_train_df = df_train[data_loader.get_target_names()]  # pandas.DataFrame
     ts_train = df_train.index.to_numpy()  # Index → np.datetime64[...]
 
-    X_train_full = X_train_df.to_numpy()  # dtype likely float64 → we’ll cast inside Dataset
-    y_train_full = y_train_df.to_numpy()
+    X_train_full = X_train_df.to_numpy().astype(np.float32)
+    y_train_full = y_train_df.to_numpy().astype(np.float32)
 
-    # 2) BUILD TimeSeriesDataset for TRAIN
-    train_dataset = TimeSeriesDataset(
+    # 2) BUILD TimeSeriesDatasetGPU for TRAIN (pass device here!)
+    train_dataset = TimeSeriesDatasetGPU(
         X_full=X_train_full,
         y_full=y_train_full,
         ts_full=ts_train,
         input_seq_len=my_config.INPUT_SEQ_LEN,
-        gap_threshold_minutes=my_config.GAP_THRESHOLD
+        gap_threshold_minutes=my_config.GAP_THRESHOLD,
+        device=device
     )
     train_loader = DataLoader(
         train_dataset,
         batch_size=my_config.BATCH_SIZE,
         shuffle=False,
         drop_last=True,
-        pin_memory=True
+        pin_memory=False,  # pin_memory can be left False—batches are already on GPU
+        num_workers=0  # <=== Set to 0 to avoid duplicating GPU tensors across workers
     )
     del y_train_full, X_train_full, ts_train, df_train
 
-    # 3) SCALE val split using existing scaler, convert to NumPy
+    # 3) SCALE val split and build val dataset similarly:
     df_val = load_scaler_and_transform_df(scalar_file, data_loader.get_split(SPLIT.VAL))
     X_val_df = df_val[data_loader.get_feature_names()]
     y_val_df = df_val[data_loader.get_target_names()]
     ts_val = df_val.index.to_numpy()
 
-    X_val_full = X_val_df.to_numpy()
-    y_val_full = y_val_df.to_numpy()
+    X_val_full = X_val_df.to_numpy().astype(np.float32)
+    y_val_full = y_val_df.to_numpy().astype(np.float32)
 
-    val_dataset = TimeSeriesDataset(
+    val_dataset = TimeSeriesDatasetGPU(
         X_full=X_val_full,
         y_full=y_val_full,
         ts_full=ts_val,
         input_seq_len=my_config.INPUT_SEQ_LEN,
-        gap_threshold_minutes=my_config.GAP_THRESHOLD
+        gap_threshold_minutes=my_config.GAP_THRESHOLD,
+        device=device
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=my_config.BATCH_SIZE,
         shuffle=False,
         drop_last=True,
-        pin_memory=True
+        pin_memory=False,
+        num_workers=0
     )
     del y_val_full, X_val_full, ts_val, df_val
     print(f"Loaded {len(train_dataset)} training samples and {len(val_dataset)} validation samples.")
@@ -99,12 +103,9 @@ def train_model(criterion, device, epoch, model, optimizer, train_loader, clip_g
     with tqdm(train_loader, unit="batch") as tepoch:
         for batch_X, batch_y, _ in tepoch:
             tepoch.set_description(f"Epoch {epoch}")
-            batch_X = batch_X.to(device, non_blocking=True)
-            batch_y = batch_y.to(device, non_blocking=True)
-
             optimizer.zero_grad()
-            preds = model(batch_X)
-            loss = criterion(preds, batch_y)
+            preds = model(batch_X)  # both X and model on GPU
+            loss = criterion(preds, batch_y)  # no device copy needed
             loss.backward()
 
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_grad_norm)
@@ -125,14 +126,11 @@ def validate_model(criterion, device, epoch, model, val_loader):
     all_truths = []
     with torch.no_grad():
         for batch_X, batch_y, _ in val_loader:
-            batch_X = batch_X.to(device, non_blocking=True)
-            batch_y = batch_y.to(device, non_blocking=True)
-
             preds = model(batch_X)
             loss = criterion(preds, batch_y)
             val_loss += loss.item() * batch_X.size(0)
 
-            all_preds.append(preds.cpu().numpy())
+            all_preds.append(preds.cpu().numpy())  # move to CPU only for logging
             all_truths.append(batch_y.cpu().numpy())
 
     val_loss /= len(val_loader.dataset)
@@ -184,7 +182,7 @@ if __name__ == "__main__":
 
     my_config: MyConfig = load_config(PATH_TO_CONFIG)
 
-    train_dataset, train_loader, val_dataset, val_loader = load_dataset(my_config, PATH_CHECKPOINT)
+    train_dataset, train_loader, val_dataset, val_loader = load_dataset(my_config, PATH_CHECKPOINT, DEVICE)
     model_state = {
         'input_size': len(my_config.get_df_names_from_config(include_targets=False)),
         'hidden_size': my_config.HIDDEN_SIZE,
@@ -205,7 +203,7 @@ if __name__ == "__main__":
     criterion = nn.SmoothL1Loss()
     optimizer = torch.optim.Adam(model.parameters(), lr=my_config.LEARNING_RATE, weight_decay=1e-3)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.9, patience=1, min_lr=1e-7
+        optimizer, mode='min', factor=0.9, patience=0, min_lr=1e-7
     )
 
     wandb.init(project="solar-irradiance-nowcasting", entity="s210025-dtu",
@@ -226,12 +224,10 @@ if __name__ == "__main__":
 
     wandb.watch(model, log="all")
 
-    start_epoch = 1
-
     best_val = float('inf')
     no_improve = 0
 
-    for epoch in range(start_epoch, my_config.EPOCHS + 1):
+    for epoch in range(1, my_config.EPOCHS + 1):
 
         train_loss = train_model(
             model=model,

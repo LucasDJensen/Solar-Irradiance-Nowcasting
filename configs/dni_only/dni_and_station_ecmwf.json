@@ -1,6 +1,6 @@
 {
   "name": "LSTM-DNI-only",
-  "description": "Including lagged features of DNI and pyranometer station data as input.",
+  "description": "Including lagged features of DNI and pyranometer station data and ECMWF forecasts as input.",
   "train_val_test_split": {
     "train": {
       "start": "2020-01-01T00:00:00Z",
@@ -19,8 +19,8 @@
   "BATCH_SIZE": 512,
   "INPUT_SEQ_LEN": 60,
   "GAP_THRESHOLD": 1,
-  "NUM_LSTM_LAYERS": 1,
-  "HIDDEN_SIZE": 32,
+  "NUM_LSTM_LAYERS": 2,
+  "HIDDEN_SIZE": 128,
   "LEARNING_RATE": 0.001,
   "DROPOUT": 0.1,
   "CLIP_GRAD_NORM": 0.86,

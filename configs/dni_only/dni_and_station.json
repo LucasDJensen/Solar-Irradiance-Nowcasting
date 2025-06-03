@@ -3,7 +3,7 @@
   "description": "Including lagged features of DNI and pyranometer station data as input.",
   "train_val_test_split": {
     "train": {
-      "start": "2000-01-01T00:00:00Z",
+      "start": "2015-01-01T00:00:00Z",
       "end": "2020-12-31T00:00:00Z"
     },
     "val": {
@@ -15,6 +15,16 @@
       "end": "2024-12-31T00:00:00Z"
     }
   },
+  "EPOCHS": 300,
+  "BATCH_SIZE": 512,
+  "INPUT_SEQ_LEN": 60,
+  "GAP_THRESHOLD": 1,
+  "NUM_LSTM_LAYERS": 1,
+  "HIDDEN_SIZE": 32,
+  "LEARNING_RATE": 0.001,
+  "DROPOUT": 0.1,
+  "CLIP_GRAD_NORM": 0.86,
+  "EARLY_STOPPING_PATIENCE": 5,
   "target_variables": [
     {
       "name": "DNI"
