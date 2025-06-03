@@ -1,0 +1,128 @@
+{
+  "name": "LSTM-DNI-only",
+  "description": "Including lagged features of DNI and pyranometer station data as input.",
+  "train_val_test_split": {
+    "train": {
+      "start": "2000-01-01T00:00:00Z",
+      "end": "2020-12-31T00:00:00Z"
+    },
+    "val": {
+      "start": "2021-01-01T00:00:00Z",
+      "end": "2022-12-31T00:00:00Z"
+    },
+    "test": {
+      "start": "2023-01-01T00:00:00Z",
+      "end": "2024-12-31T00:00:00Z"
+    }
+  },
+  "EPOCHS": 300,
+  "BATCH_SIZE": 512,
+  "INPUT_SEQ_LEN": 60,
+  "GAP_THRESHOLD": 1,
+  "NUM_LSTM_LAYERS": 1,
+  "HIDDEN_SIZE": 32,
+  "LEARNING_RATE": 0.001,
+  "DROPOUT": 0.1,
+  "CLIP_GRAD_NORM": 0.86,
+  "EARLY_STOPPING_PATIENCE": 5,
+  "target_variables": [
+    {
+      "name": "DNI"
+    }
+  ],
+  "features": [
+    {
+      "name": "DNI",
+      "include_self": false,
+      "lag": [
+        {
+          "name": "DNI_lag_60",
+          "value": 60
+        },
+        {
+          "name": "DNI_lag_1440",
+          "value": 1440
+        },
+        {
+          "name": "DNI_lag_2880",
+          "value": 2880
+        }
+      ]
+    },
+    {
+      "name": "air_pressure",
+      "include_self": false,
+      "lag": [
+        {
+          "name": "air_pressure_lag_60",
+          "value": 60
+        }
+      ]
+    },
+    {
+      "name": "air_temperature",
+      "include_self": false,
+      "lag": [
+        {
+          "name": "air_temperature_lag_60",
+          "value": 60
+        }
+      ]
+    },
+    {
+      "name": "rain_duration",
+      "include_self": false,
+      "lag": [
+        {
+          "name": "rain_duration_lag_60",
+          "value": 60
+        }
+      ]
+    },
+    {
+      "name": "rain_intensity",
+      "include_self": false,
+      "lag": [
+        {
+          "name": "rain_intensity_lag_60",
+          "value": 60
+        }
+      ]
+    },
+    {
+      "name": "relative_humidity",
+      "include_self": false,
+      "lag": [
+        {
+          "name": "relative_humidity_lag_60",
+          "value": 60
+        }
+      ]
+    },
+    {
+      "name": "solar_altitude",
+      "include_self": true,
+      "lag": []
+    },
+    {
+      "name": "wind_dir_avg",
+      "include_self": false,
+      "lag": [
+        {
+          "name": "wind_dir_avg_lag_60",
+          "value": 60
+        }
+      ]
+    },
+    {
+      "name": "wind_speed_avg",
+      "include_self": false,
+      "lag": [
+        {
+          "name": "wind_speed_avg_lag_60",
+          "value": 60
+        }
+      ]
+    }
+  ]
+}

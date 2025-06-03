@@ -138,8 +138,8 @@ def validate_model(criterion, device, epoch, model, val_loader):
 
     val_preds = np.concatenate(all_preds, axis=0)
     val_truths = np.concatenate(all_truths, axis=0)
-    evaluator = ForecastEvaluator(val_truths.flatten(), val_preds.flatten())
-    eval_metrics = evaluator.evaluate_all()
+    evaluator = ForecastEvaluator()
+    eval_metrics = evaluator.evaluate_all(val_truths.flatten(), val_preds.flatten())
     wandb.log(eval_metrics)
 
     # Example plot (unchanged)

@@ -179,3 +179,5 @@ wandb/
 .venv_jupyter/
 
 .idea/
+
+predictions.pkl

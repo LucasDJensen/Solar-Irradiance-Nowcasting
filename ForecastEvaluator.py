@@ -3,16 +3,6 @@ from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 
 
 class ForecastEvaluator:
-    def __init__(self, y_true, y_pred):
-        """
-        Initializes the evaluator with true and predicted values.
-
-        Parameters:
-            y_true (array-like): The actual observed values.
-            y_pred (array-like): The forecasted values.
-        """
-        self.y_true = np.array(y_true)
-        self.y_pred = np.array(y_pred)
 
     @staticmethod
     def compute_r2(y_true, y_pred):
@@ -84,18 +74,18 @@ class ForecastEvaluator:
         return np.mean(np.abs((y_true[valid_indices] - y_pred[valid_indices]) / y_true[valid_indices])) * 100
 
 
-    def evaluate_all(self):
+    def evaluate_all(self, y_true, y_pred):
         """
         Compute and return all evaluation metrics as a dictionary.
         """
         metrics = {
-            'RMSE': self.compute_rmse(self.y_true, self.y_pred),
-            'MAE': self.compute_mae(self.y_true, self.y_pred),
-            'MAPE': self.compute_mape(self.y_true, self.y_pred),
-            'R2': self.compute_r2(self.y_true, self.y_pred),
-            'NMAE': self.compute_nmae(self.y_true, self.y_pred),
-            'NRMSE': self.compute_nrmse(self.y_true, self.y_pred),
-            'Skill Score': self.compute_skill_score(self.y_true, self.y_pred),
-            'MBE': self.compute_mbe(self.y_true, self.y_pred),
+            'RMSE': self.compute_rmse(y_true, y_pred),
+            'MAE': self.compute_mae(y_true, y_pred),
+            'MAPE': self.compute_mape(y_true, y_pred),
+            'R2': self.compute_r2(y_true, y_pred),
+            'NMAE': self.compute_nmae(y_true, y_pred),
+            'NRMSE': self.compute_nrmse(y_true, y_pred),
+            'Skill Score': self.compute_skill_score(y_true, y_pred),
+            'MBE': self.compute_mbe(y_true, y_pred),
         }
         return metrics

@@ -16,14 +16,14 @@
     }
   },
   "EPOCHS": 300,
-  "BATCH_SIZE": 512,
+  "BATCH_SIZE": 256,
   "INPUT_SEQ_LEN": 60,
   "GAP_THRESHOLD": 1,
-  "NUM_LSTM_LAYERS": 2,
-  "HIDDEN_SIZE": 128,
+  "NUM_LSTM_LAYERS": 1,
+  "HIDDEN_SIZE": 64,
   "LEARNING_RATE": 0.001,
-  "DROPOUT": 0.1,
-  "CLIP_GRAD_NORM": 0.86,
+  "DROPOUT": 0.4,
+  "CLIP_GRAD_NORM": 0.7,
   "EARLY_STOPPING_PATIENCE": 5,
   "target_variables": [
     {

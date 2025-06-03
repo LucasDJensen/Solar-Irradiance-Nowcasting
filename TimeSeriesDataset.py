@@ -75,6 +75,7 @@ class TimeSeriesDatasetGPU(Dataset):
         #    After this, self.X_full_t and self.y_full_t live on GPU.
         self.X_full_t = torch.from_numpy(X_full).to(device, non_blocking=True)
         self.y_full_t = torch.from_numpy(y_full).to(device, non_blocking=True)
+        self.ts_full = ts_full
 
         # (No need to keep ts_full around—indexing & gap logic is done.)
 
