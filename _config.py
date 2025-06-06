@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-PATH_TO_CONFIG = Path(os.getenv("CONFIG", r'D:\Jetbrains\Python\Projects\solar_irradiance_nowcasting\configs\dni_only\dni_and_station_ecmwf.json'))
+PATH_TO_CONFIG = Path(os.getenv("CONFIG", r'D:\Jetbrains\Python\Projects\solar_irradiance_nowcasting\configs\dni_only\LSTM_ATTENTION_DNI_STATION_ECMWF.json'))
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", r'D:\Jetbrains\Python\Projects\solar_irradiance_nowcasting'))
 PATH_OUTPUT = PROJECT_ROOT / 'output'

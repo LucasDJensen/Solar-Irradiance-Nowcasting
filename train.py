@@ -171,8 +171,9 @@ def save_checkpoint(epoch, epoch_loss, model, optimizer, val_loss):
 
 
 if __name__ == "__main__":
+    my_config: MyConfig = load_config(PATH_TO_CONFIG)
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    time_str = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    time_str = datetime.datetime.now().strftime("%Y%m%d-%H%M%S_{0}_{1}_{2}".format(my_config.name, my_config.NUM_LSTM_LAYERS, my_config.HIDDEN_SIZE))
     PATH_CHECKPOINT = PATH_CHECKPOINT / time_str
 
     PATH_CHECKPOINT.mkdir(parents=True, exist_ok=True)
@@ -180,7 +181,6 @@ if __name__ == "__main__":
     shutil.copy(__file__, PATH_CHECKPOINT / 'train.py')  # copy training script to checkpoint directory
     shutil.copy(os.path.join(os.path.dirname(__file__), 'models.py'), PATH_CHECKPOINT / 'models.py')  # copy models.py to checkpoint directory
 
-    my_config: MyConfig = load_config(PATH_TO_CONFIG)
 
     train_dataset, train_loader, val_dataset, val_loader = load_dataset(my_config, PATH_CHECKPOINT, DEVICE)
     model_state = {
@@ -203,12 +203,13 @@ if __name__ == "__main__":
     criterion = nn.SmoothL1Loss()
     optimizer = torch.optim.Adam(model.parameters(), lr=my_config.LEARNING_RATE, weight_decay=1e-3)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.9, patience=0, min_lr=1e-7
+        optimizer, mode='min', factor=0.9, patience=1, min_lr=1e-8
     )
 
     wandb.init(project="solar-irradiance-nowcasting", entity="s210025-dtu",
                config={"Dataset": "DTU Solar Station",
                        "Model": "SimpleLSTM",
+                       "Config Name": my_config.name,
                        "Input Sequence Length": my_config.INPUT_SEQ_LEN,
                        "Hidden Size": my_config.HIDDEN_SIZE,
                        "LSTM Layers": my_config.NUM_LSTM_LAYERS,
