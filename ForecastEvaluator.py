@@ -5,6 +5,13 @@ from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 class ForecastEvaluator:
 
     @staticmethod
+    def compute_mse(y_true, y_pred):
+        """
+        Compute the mean squared error (MSE).
+        """
+        return mean_squared_error(y_true, y_pred)
+
+    @staticmethod
     def compute_r2(y_true, y_pred):
         """
         Compute the coefficient of determination (R²).
@@ -79,6 +86,7 @@ class ForecastEvaluator:
         Compute and return all evaluation metrics as a dictionary.
         """
         metrics = {
+            'MSE': self.compute_mse(y_true, y_pred),
             'RMSE': self.compute_rmse(y_true, y_pred),
             'MAE': self.compute_mae(y_true, y_pred),
             'MAPE': self.compute_mape(y_true, y_pred),
@@ -89,3 +97,13 @@ class ForecastEvaluator:
             'MBE': self.compute_mbe(y_true, y_pred),
         }
         return metrics
+
+    @staticmethod
+    def available_metrics():
+        """
+        Return a list of available metrics.
+        """
+        return [
+            'MSE', 'RMSE', 'MAE', 'MAPE', 'R2',
+            'NMAE', 'NRMSE', 'Skill Score', 'MBE'
+        ]

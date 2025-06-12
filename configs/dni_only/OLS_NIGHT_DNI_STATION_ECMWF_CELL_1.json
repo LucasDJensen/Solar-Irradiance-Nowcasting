@@ -1,5 +1,5 @@
 {
-  "name": "LSTM_DNI_STATION_ECMWF_CELL_1_LAGS",
+  "name": "OLS_NIGHT_DNI_STATION_ECMWF_CELL_1",
   "description": "Including lagged features of DNI and pyranometer station data as well as a single grid cell on the location of the station from the  ECMWF forecast.",
   "train_val_test_split": {
     "train": {
@@ -120,52 +120,6 @@
       "lag": [
         {
           "name": "wind_speed_avg_lag_60",
-          "value": 60
-        }
-      ]
-    },
-    {
-      "name": "tcc_cell85",
-      "include_self": true,
-      "lag": [
-        {
-          "name": "tcc_cell85_lag_1",
-          "value": 1
-        },
-        {
-          "name": "tcc_cell85_lag_2",
-          "value": 2
-        },
-        {
-          "name": "tcc_cell85_lag_3",
-          "value": 3
-        },
-        {
-          "name": "tcc_cell85_lag_4",
-          "value": 4
-        },
-        {
-          "name": "tcc_cell85_lag_5",
-          "value": 5
-        },
-        {
-          "name": "tcc_cell85_lag_10",
-          "value": 10
-        },
-        {
-          "name": "tcc_cell85_lag_15",
-          "value": 15
-        },
-        {
-          "name": "tcc_cell85_lag_30",
-          "value": 30
-        },
-        {
-          "name": "tcc_cell85_lag_45",
-          "value": 45
-        },
-        {
-          "name": "tcc_cell85_lag_60",
           "value": 60
         }
       ]

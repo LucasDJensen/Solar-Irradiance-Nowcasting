@@ -1,17 +1,17 @@
 {
-  "name": "LSTM_DNI_STATION_ECMWF_CELL_1_LAGS",
-  "description": "Including lagged features of DNI and pyranometer station data as well as a single grid cell on the location of the station from the  ECMWF forecast.",
+  "name": "LSTM_DNI_STATION_2015",
+  "description": "Including lagged features of DNI and pyranometer station data as input.",
   "train_val_test_split": {
     "train": {
-      "start": "2020-01-01T00:00:00Z",
-      "end": "2022-12-31T00:00:00Z"
+      "start": "2015-01-01T00:00:00Z",
+      "end": "2020-12-31T00:00:00Z"
     },
     "val": {
-      "start": "2023-01-01T00:00:00Z",
-      "end": "2023-12-31T00:00:00Z"
+      "start": "2021-01-01T00:00:00Z",
+      "end": "2022-12-31T00:00:00Z"
     },
     "test": {
-      "start": "2024-01-01T00:00:00Z",
+      "start": "2023-01-01T00:00:00Z",
       "end": "2024-12-31T00:00:00Z"
     }
   },
@@ -120,52 +120,6 @@
       "lag": [
         {
           "name": "wind_speed_avg_lag_60",
-          "value": 60
-        }
-      ]
-    },
-    {
-      "name": "tcc_cell85",
-      "include_self": true,
-      "lag": [
-        {
-          "name": "tcc_cell85_lag_1",
-          "value": 1
-        },
-        {
-          "name": "tcc_cell85_lag_2",
-          "value": 2
-        },
-        {
-          "name": "tcc_cell85_lag_3",
-          "value": 3
-        },
-        {
-          "name": "tcc_cell85_lag_4",
-          "value": 4
-        },
-        {
-          "name": "tcc_cell85_lag_5",
-          "value": 5
-        },
-        {
-          "name": "tcc_cell85_lag_10",
-          "value": 10
-        },
-        {
-          "name": "tcc_cell85_lag_15",
-          "value": 15
-        },
-        {
-          "name": "tcc_cell85_lag_30",
-          "value": 30
-        },
-        {
-          "name": "tcc_cell85_lag_45",
-          "value": 45
-        },
-        {
-          "name": "tcc_cell85_lag_60",
           "value": 60
         }
       ]

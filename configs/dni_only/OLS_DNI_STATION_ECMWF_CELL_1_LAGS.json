@@ -1,5 +1,5 @@
 {
-  "name": "LSTM_DNI_STATION_ECMWF_CELL_1_LAGS",
+  "name": "OLS_DNI_STATION_ECMWF_CELL_1_LAGS",
   "description": "Including lagged features of DNI and pyranometer station data as well as a single grid cell on the location of the station from the  ECMWF forecast.",
   "train_val_test_split": {
     "train": {

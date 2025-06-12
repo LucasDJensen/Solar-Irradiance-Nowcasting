@@ -203,7 +203,7 @@ if __name__ == "__main__":
     criterion = nn.SmoothL1Loss()
     optimizer = torch.optim.Adam(model.parameters(), lr=my_config.LEARNING_RATE, weight_decay=1e-3)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.9, patience=1, min_lr=1e-8
+        optimizer, mode='min', factor=0.5, patience=1, min_lr=1e-8
     )
 
     wandb.init(project="solar-irradiance-nowcasting", entity="s210025-dtu",

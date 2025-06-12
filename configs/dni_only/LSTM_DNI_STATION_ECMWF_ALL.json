@@ -1,5 +1,5 @@
 {
-  "name": "LSTM_DNI_STATION_ECMWF",
+  "name": "LSTM_DNI_STATION_ECMWF_ALL",
   "description": "Including lagged features of DNI and pyranometer station data and ECMWF forecasts as input.",
   "train_val_test_split": {
     "train": {
@@ -20,11 +20,11 @@
   "INPUT_SEQ_LEN": 60,
   "GAP_THRESHOLD": 1,
   "NUM_LSTM_LAYERS": 3,
-  "HIDDEN_SIZE": 256,
+  "HIDDEN_SIZE": 32,
   "LEARNING_RATE": 0.0001,
-  "DROPOUT": 0.4,
-  "CLIP_GRAD_NORM": 0.62,
-  "EARLY_STOPPING_PATIENCE": 5,
+  "DROPOUT": 0.1,
+  "CLIP_GRAD_NORM": 0.86,
+  "EARLY_STOPPING_PATIENCE": 10,
   "target_variables": [
     {
       "name": "DNI"
