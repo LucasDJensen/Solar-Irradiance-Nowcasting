@@ -40,6 +40,11 @@
           "value": 60
         }
       ]
+    },
+    {
+      "name": "DNI_CLEAR_SKY",
+      "include_self": true,
+      "lag": []
     }
   ]
 }

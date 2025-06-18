@@ -113,7 +113,7 @@ def train_model(criterion, device, epoch, model, optimizer, train_loader, clip_g
             optimizer.step()
 
             epoch_loss += loss.item() * batch_X.size(0)
-            tepoch.set_postfix(loss=loss.item())
+            # tepoch.set_postfix(loss=loss.item())
     epoch_loss /= len(train_loader.dataset)
     wandb.log({"epoch": epoch, "train_loss": epoch_loss, "lr": optimizer.param_groups[0]["lr"]})
     return epoch_loss
@@ -125,13 +125,14 @@ def validate_model(criterion, device, epoch, model, val_loader):
     all_preds = []
     all_truths = []
     with torch.no_grad():
-        for batch_X, batch_y, _ in val_loader:
-            preds = model(batch_X)
-            loss = criterion(preds, batch_y)
-            val_loss += loss.item() * batch_X.size(0)
+        with tqdm(val_loader, unit="batch") as tepoch:
+            for batch_X, batch_y, _ in tepoch:
+                preds = model(batch_X)
+                loss = criterion(preds, batch_y)
+                val_loss += loss.item() * batch_X.size(0)
 
-            all_preds.append(preds.cpu().numpy())  # move to CPU only for logging
-            all_truths.append(batch_y.cpu().numpy())
+                all_preds.append(preds.cpu().numpy())  # move to CPU only for logging
+                all_truths.append(batch_y.cpu().numpy())
 
     val_loss /= len(val_loader.dataset)
     wandb.log({"epoch": epoch, "val_loss": val_loss})
@@ -195,9 +196,9 @@ if __name__ == "__main__":
         json.dump(model_state, f)
     
     model = SimpleLSTM(input_size=model_state['input_size'],
-                       hidden_size=model_state['hidden_size'],
+        hidden_size=model_state['hidden_size'],
                        output_size= model_state['output_size'],
-                       num_layers=model_state['num_layers'],
+        num_layers=model_state['num_layers'],
                        dropout=model_state['dropout']).to(DEVICE)
 
     criterion = nn.SmoothL1Loss()
